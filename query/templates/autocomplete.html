@@ -1,0 +1,164 @@
+<!doctype html>
+<html>
+<head>
+	<title>Autocomplete input suggestion using Python and Flask</title>
+
+	<style>
+		.loader {
+			border: 4px solid #f3f3f3; /* Light grey */
+			border-top: 4px solid #3498db; /* Blue */
+			border-radius: 50%;
+			width: 20px;
+			height: 20px;
+			animation: spin 2s linear infinite;
+		}
+		@keyframes spin {
+			0% { transform: rotate(0deg); }
+			100% { transform: rotate(360deg); }
+		}
+		.loading-text {
+			display: inline-block;
+			vertical-align: middle;
+			margin-left: 5px;
+		}
+	</style>
+
+	<!-- <div class="loader" id="loader"></div> -->
+
+	<link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.bundle.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+	<script>
+		$(document).ready(function(){
+			var searchBox = $("#searchBox");
+		
+			searchBox.autocomplete({
+				source: function(request, response) {
+					// Before making AJAX request, use temporary data containing HTML markup with spinner and loading text
+					response([{ label: '<div style="display: flex; align-items: center; white-space: nowrap;"><div class="loader" style="display: inline-block;"></div><span class="loading-text" style="display: inline-block; margin-left: 5px;">Generating autocomplete...</span></div>', value: '' }]);
+			
+					$.ajax({
+						url: "/search",
+						type: "GET",
+						data: { term: request.term },
+						success: function(data) {
+							// On success, replace dropdown content with actual data
+							response($.map(data, function(item) {
+								return { label: item, value: item };
+							}));
+						},
+						error: function() {
+							// On error, show error message
+							response([{ label: 'Error loading results', value: '' }]);
+						}
+					});
+				},
+				minLength: 3,
+				delay: 2000, // Delay before making AJAX request
+				html: true, // Set to true to enable HTML in the dropdown
+				open: function(event, ui) {
+					$(".ui-autocomplete").css("z-index", 1000);
+				}
+			}).autocomplete("instance")._renderItem = function(ul, item) {
+				// HTML 마크업을 직접 처리합니다.
+				var $li = $("<li>").appendTo(ul);
+				// 로딩 스피너 또는 에러 메시지가 포함된 경우, HTML을 그대로 사용합니다.
+				if (item.label.includes('loader') || item.label.includes('Error')) {
+					return $li.append(item.label);
+				} else {
+					// 사용자 입력과 자동완성 항목 비교 로직 유지
+					var userInputWords = searchBox.val().split(/\s+/);
+					var autocompleteWords = item.label.split(/\s+/);
+					var formattedLabel = autocompleteWords.map(word => 
+						userInputWords.includes(word) ? word : `<strong>${word}</strong>`
+					).join(' ');
+					return $li.append("<div>" + formattedLabel + "</div>");
+				}
+			};
+		});
+	</script>
+	<script>
+		$(document).ready(function(){
+			$("#searchBox").on("input", function(){
+				var searchTxt = $("input[name='search']").val();
+	
+				$.ajax({
+					url: "/get_list", // 이 부분은 서버의 이미지 리스트를 반환하는 URL로 변경해야 할 수 있습니다.
+					type: "GET",
+					data: {text: searchTxt},
+					success: function(response){
+						$('#imageList').empty(); // 'videoList'는 이미지 리스트를 보여줄 요소의 ID로 적절히 변경해야 할 수 있습니다.
+						// 새 이미지 추가
+						$.each(response, function(i, imgUrl) { // 'img_urls'는 서버 응답에서 이미지 URL 리스트를 담고 있는 필드로 가정합니다.
+							var image = $("<img>")
+								.attr("src", imgUrl)
+								.attr("width", 320) // 이미지 크기는 필요에 따라 조정합니다.
+								.attr("height", 240);
+							$('#imageList').append(image); // 'videoList'는 이미지 리스트를 보여줄 요소의 ID로 적절히 변경해야 할 수 있습니다.
+						});
+					}
+				});
+			});
+		});
+	</script>
+	<script>
+		$(document).ready(function(){
+			$("#btnClear").prop('disabled', true);
+
+			$("#searchBox").on("keyup", function() {
+				var searchTxt = $(this).val();
+				var wordCount = searchTxt.split(/\s+/).filter(function(n) { return n != '' }).length; // 공백으로 분리하여 단어 개수 계산, 빈 문자열 제외
+				if(wordCount >= 10) {
+					$("#btnSearch").prop('disabled', false); // 단어 개수가 10 이상이면 Clear 버튼 활성화
+				} else {
+					$("#btnSearch").prop('disabled', true); // 그렇지 않으면 비활성화
+				}
+	
+				// AJAX 요청을 통해 서버에 로그 데이터 전송 (GET 방식)
+				$.ajax({
+					url: "/log_key_event?text=" + encodeURIComponent(searchTxt),
+					type: "GET",
+					success: function(response) {
+						console.log("Log saved successfully");
+					},
+					error: function(xhr, status, error) {
+						console.error("Error saving log");
+					}
+				});
+			});
+
+			// Clear 버튼 클릭 이벤트
+			$("#btnClear").click(function() {
+				$("#searchBox").val(''); // searchBox의 값을 비웁니다.
+				$(this).prop('disabled', true); // Clear 버튼을 비활성화합니다.
+				
+				// searchBox의 input 이벤트를 수동으로 트리거하여 이미지 리스트 갱신 로직을 호출합니다.
+				$("#searchBox").trigger("input");
+			});
+		});
+	</script>
+	<!-- <link rel="stylesheet" href="./typeahead.css"> -->
+	<style>
+		#imageList {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: center;
+		}
+		#imageList img {
+			margin: 5px 3px;
+		}
+	</style>
+</head>
+<body>
+	<div style="width: 600px; margin: auto;">
+		<h2>Autocomplete input suggestion for driving scene</h2>
+		<p style="width: 800px; margin: auto;">
+			<label>Search Here</label>&nbsp;&nbsp;<input type="text" name="search" id="searchBox" style="width: 560px"/>
+			<!-- <div id="loading" style="display: none;">Loading...</div> -->
+			<button type="button" id="btnClear">CLEAR</button>
+		</p>
+	</div>
+	<div id="searchResults"></div>
+	<ul id="imageList" style="margin: auto;"></ul>
+</body>
