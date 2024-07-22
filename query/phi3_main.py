@@ -34,7 +34,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 embed_model_id = "nomic-ai/nomic-embed-text-v1.5"
 matryoshka_dim = 512
 similarity_threshold = 0.6
-top_similar_images = 300
+top_similar_images = 100
 
 # Hyperparameters for phi3
 language_model_id = "microsoft/Phi-3-mini-4k-instruct"
