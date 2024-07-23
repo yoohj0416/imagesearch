@@ -50,6 +50,12 @@ images_base = 'firstframes_jpg'
 # Device
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+# Make logging file
+log_file_name = 'event.log'
+if not os.path.exists(log_file_name):
+	with open(log_file_name, 'w') as f:
+		f.write('')
+
 global embed_model
 global image_ids
 global caption_embeddings
@@ -268,9 +274,25 @@ async def log_key_event(request: Request, text: str):
 	client_ip = request.client.host
 	current_time = datetime.now().isoformat()
 
-	print(f'Client IP: {client_ip}, Text: {text}, Time: {current_time}')
+	with open(log_file_name, 'a') as f:
+		f.write(f'Client IP: {client_ip}, Text: {text}, Time: {current_time}, Key event\n')
+
+	print(f'Client IP: {client_ip}, Text: {text}, Time: {current_time}, Key event')
 	
 	return {"message": "Log saved successfully"}
+
+@app.get("/log_clear_event")
+async def log_clear_event(request: Request, text: str):
+
+	client_ip = request.client.host
+	current_time = datetime.now().isoformat()
+
+	with open(log_file_name, 'a') as f:
+		f.write(f'Client IP: {client_ip}, Text: {text}, Time: {current_time}, Clear button event\n')
+
+	print(f'Client IP: {client_ip}, Text: {text}, Time: {current_time}, Clear button event')
+
+	return {"message": "Log cleared successfully"}
 
 
 if __name__ == "__main__":

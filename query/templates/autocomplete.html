@@ -141,7 +141,7 @@
 					url: "/log_key_event?text=" + encodeURIComponent(searchTxt),
 					type: "GET",
 					success: function(response) {
-						console.log("Log saved successfully");
+						console.log("Key input log saved successfully");
 					},
 					error: function(xhr, status, error) {
 						console.error("Error saving log");
@@ -151,6 +151,20 @@
 
 			// Clear button click event
 			$("#btnClear").click(function() {
+				var searchTxt = $("#searchBox").val();
+				
+				// AJAX request to log the clear event
+				$.ajax({
+					url: "/log_clear_event?text=" + encodeURIComponent(searchTxt),
+					type: "GET",
+					success: function(response) {
+						console.log("Clear log saved successfully");
+					},
+					error: function(xhr, status, error) {
+						console.error("Error saving clear log");
+					}
+				});
+
 				$("#searchBox").val(''); // Clear search box
 				$(this).prop('disabled', true); // Disable the Clear button
 				
