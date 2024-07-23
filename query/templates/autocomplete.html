@@ -32,42 +32,80 @@
 	<script>
 		$(document).ready(function(){
 			var searchBox = $("#searchBox");
+
+			// Function to load image list based on search text
+			function loadImageList(searchTxt) {
+				$.ajax({
+					url: "/get_list",
+					type: "GET",
+					data: {text: searchTxt},
+					success: function(response){
+						$('#imageList').empty(); 
+						$.each(response, function(i, imgUrl) {
+							var image = $("<img>")
+								.attr("src", imgUrl)
+								.attr("width", 320)
+								.attr("height", 240);
+							$('#imageList').append(image);
+						});
+					}
+				});
+			}
 		
+			// Initialize autocomplete
 			searchBox.autocomplete({
 				source: function(request, response) {
-					// Before making AJAX request, use temporary data containing HTML markup with spinner and loading text
-					response([{ label: '<div style="display: flex; align-items: center; white-space: nowrap;"><div class="loader" style="display: inline-block;"></div><span class="loading-text" style="display: inline-block; margin-left: 5px;">Generating autocomplete...</span></div>', value: '' }]);
-			
-					$.ajax({
-						url: "/search",
-						type: "GET",
-						data: { term: request.term },
-						success: function(data) {
-							// On success, replace dropdown content with actual data
-							response($.map(data, function(item) {
-								return { label: item, value: item };
-							}));
-						},
-						error: function() {
-							// On error, show error message
-							response([{ label: 'Error loading results', value: '' }]);
-						}
-					});
+					// Get the search text
+					var searchTxt = request.term;
+
+					// Count the number of words in the search text
+					var wordCount = searchTxt.split(/\s+/).filter(function(n) { return n != '' }).length;
+					console.log("Search text: " + searchTxt);
+					console.log("Word count: " + wordCount);
+					// If the number of words is less than 10, make an AJAX request to get autocomplete suggestions
+					if (wordCount < 10) {
+						// Before making AJAX request, use temporary data containing HTML markup with spinner and loading text
+						response([{ label: '<div style="display: flex; align-items: center; white-space: nowrap;"><div class="loader" style="display: inline-block;"></div><span class="loading-text" style="display: inline-block; margin-left: 5px;">Generating autocomplete...</span></div>', value: '' }]);
+				
+						$.ajax({
+							url: "/search",
+							type: "GET",
+							data: { term: request.term },
+							success: function(data) {
+								// On success, replace dropdown content with actual data
+								response($.map(data, function(item) {
+									return { label: item, value: item };
+								}));
+							},
+							error: function() {
+								// On error, show error message
+								response([{ label: 'Error loading results', value: '' }]);
+							}
+						});
+					} else {
+						// If the number of words is greater than or equal to 10, do not make an AJAX request
+						response([]);
+					}
 				},
 				minLength: 3,
 				delay: 2000, // Delay before making AJAX request
 				html: true, // Set to true to enable HTML in the dropdown
 				open: function(event, ui) {
 					$(".ui-autocomplete").css("z-index", 1000);
-				}
+				},
+				select: function(event, ui) {
+					searchBox.val(ui.item.value); // Set the value of the search box to the selected item
+					loadImageList(ui.item.value); // Load the image list based on the selected item
+					event.preventDefault(); // Prevent the default behavior
+				},
 			}).autocomplete("instance")._renderItem = function(ul, item) {
-				// HTML 마크업을 직접 처리합니다.
+				// Create a new list item with the label as HTML content
 				var $li = $("<li>").appendTo(ul);
-				// 로딩 스피너 또는 에러 메시지가 포함된 경우, HTML을 그대로 사용합니다.
+				// If the label contains 'loader' or 'Error', display it as is
 				if (item.label.includes('loader') || item.label.includes('Error')) {
 					return $li.append(item.label);
 				} else {
-					// 사용자 입력과 자동완성 항목 비교 로직 유지
+					// Highlight the words in the label that match the user input
 					var userInputWords = searchBox.val().split(/\s+/);
 					var autocompleteWords = item.label.split(/\s+/);
 					var formattedLabel = autocompleteWords.map(word => 
@@ -76,29 +114,11 @@
 					return $li.append("<div>" + formattedLabel + "</div>");
 				}
 			};
-		});
-	</script>
-	<script>
-		$(document).ready(function(){
+			
+			// Load image list based on search text
 			$("#searchBox").on("input", function(){
 				var searchTxt = $("input[name='search']").val();
-	
-				$.ajax({
-					url: "/get_list", // 이 부분은 서버의 이미지 리스트를 반환하는 URL로 변경해야 할 수 있습니다.
-					type: "GET",
-					data: {text: searchTxt},
-					success: function(response){
-						$('#imageList').empty(); // 'videoList'는 이미지 리스트를 보여줄 요소의 ID로 적절히 변경해야 할 수 있습니다.
-						// 새 이미지 추가
-						$.each(response, function(i, imgUrl) { // 'img_urls'는 서버 응답에서 이미지 URL 리스트를 담고 있는 필드로 가정합니다.
-							var image = $("<img>")
-								.attr("src", imgUrl)
-								.attr("width", 320) // 이미지 크기는 필요에 따라 조정합니다.
-								.attr("height", 240);
-							$('#imageList').append(image); // 'videoList'는 이미지 리스트를 보여줄 요소의 ID로 적절히 변경해야 할 수 있습니다.
-						});
-					}
-				});
+				loadImageList(searchTxt); // Call the function to load image list
 			});
 		});
 	</script>
@@ -107,15 +127,16 @@
 			$("#btnClear").prop('disabled', true);
 
 			$("#searchBox").on("keyup", function() {
+
 				var searchTxt = $(this).val();
-				var wordCount = searchTxt.split(/\s+/).filter(function(n) { return n != '' }).length; // 공백으로 분리하여 단어 개수 계산, 빈 문자열 제외
+				var wordCount = searchTxt.split(/\s+/).filter(function(n) { return n != '' }).length; // count the number of words in the search box
 				if(wordCount >= 10) {
-					$("#btnSearch").prop('disabled', false); // 단어 개수가 10 이상이면 Clear 버튼 활성화
+					$("#btnClear").prop('disabled', false); // If the number of words is greater than or equal to 10, enable the Clear button
 				} else {
-					$("#btnSearch").prop('disabled', true); // 그렇지 않으면 비활성화
+					$("#btnClear").prop('disabled', true); // Otherwise, disable the Clear button
 				}
 	
-				// AJAX 요청을 통해 서버에 로그 데이터 전송 (GET 방식)
+				// AJAX request to log the key event
 				$.ajax({
 					url: "/log_key_event?text=" + encodeURIComponent(searchTxt),
 					type: "GET",
@@ -128,17 +149,33 @@
 				});
 			});
 
-			// Clear 버튼 클릭 이벤트
+			// Clear button click event
 			$("#btnClear").click(function() {
-				$("#searchBox").val(''); // searchBox의 값을 비웁니다.
-				$(this).prop('disabled', true); // Clear 버튼을 비활성화합니다.
+				$("#searchBox").val(''); // Clear search box
+				$(this).prop('disabled', true); // Disable the Clear button
 				
-				// searchBox의 input 이벤트를 수동으로 트리거하여 이미지 리스트 갱신 로직을 호출합니다.
+				// Trigger input event to update the image list
 				$("#searchBox").trigger("input");
 			});
 		});
 	</script>
-	<!-- <link rel="stylesheet" href="./typeahead.css"> -->
+	<script>
+		$(document).ready(function(){
+			$(".help-icon").hover(function(){
+				// Get the position of the help icon
+				var iconPosition = $(this).position();
+				var iconHeight = $(this).outerHeight();
+				$(".tooltip").css({
+				display: "block",
+				top: iconPosition.top + iconHeight + "px", // align tooltip below the help-icon
+				left: iconPosition.left + "px" // align tooltip with the help-icon
+				});
+			}, function(){
+				// Hide the tooltip when the mouse leaves the help icon
+				$(".tooltip").hide();
+			});
+		});
+	</script>
 	<style>
 		#imageList {
 			display: flex;
@@ -148,16 +185,45 @@
 		#imageList img {
 			margin: 5px 3px;
 		}
+		.tooltip {
+			display: none; /* 기본적으로 숨김 */
+			position: absolute;
+			background-color: #f9f9f9;
+			border: 1px solid #d4d4d4;
+			padding: 5px;
+			border-radius: 5px;
+			width: 400px;
+		}
+		.help-icon {
+			cursor: pointer;
+			display: inline-block;
+			background-color: #e0e0e0;
+			width: 20px;
+			height: 20px;
+			text-align: center;
+			line-height: 20px;
+			border-radius: 50%;
+		}
 	</style>
 </head>
 <body>
 	<div style="width: 600px; margin: auto;">
-		<h2>Autocomplete input suggestion for driving scene</h2>
-		<p style="width: 800px; margin: auto;">
-			<label>Search Here</label>&nbsp;&nbsp;<input type="text" name="search" id="searchBox" style="width: 560px"/>
-			<!-- <div id="loading" style="display: none;">Loading...</div> -->
+		<h2>Image Search with Generative Autocompletion</h2>
+		<div style="width: 800px; margin: auto; display: flex; align-items: center;">
+			<!-- <label>Search Here</label>&nbsp;&nbsp; -->
+			<input type="text" name="search" id="searchBox" style="width: 560px" placeholder="Search driving scene. (e.g. a man unloading a truck)"/>
 			<button type="button" id="btnClear">CLEAR</button>
-		</p>
+			&nbsp;&nbsp;
+			<div class="help-icon">?</div>
+			<div class="tooltip">
+				<ul>
+					<li>Images are searched based on the calculated similarity between text and image.</li>
+					<li>Autocompletion generation starts 2 seconds after you start typing the text and takes 5-7 seconds.</li>
+					<li>If you enter more than 10 words, autocompletion generation will stop and the <strong>Clear</strong> button will be activated.</li>
+					<li>Please press the <strong>Clear</strong> button after finishing the current search topic before starting the next search.</li>
+				</ul>
+			</div>
+		</div>
 	</div>
 	<div id="searchResults"></div>
 	<ul id="imageList" style="margin: auto;"></ul>

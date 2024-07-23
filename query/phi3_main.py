@@ -33,7 +33,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Hyperparameters for embedding model
 embed_model_id = "nomic-ai/nomic-embed-text-v1.5"
 matryoshka_dim = 512
-similarity_threshold = 0.6
+similarity_threshold = 0.55
 top_similar_images = 300
 
 # Hyperparameters for phi3
@@ -44,7 +44,8 @@ max_new_tokens = 1024
 
 # Path to image captions
 captions_path = '/home/hojin/imagesearch/outputs/captions-drama-firstframes-florence2.csv'
-images_base = 'firstframes'
+# images_base = 'firstframes'
+images_base = 'firstframes_jpg'
 
 # Device
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -148,8 +149,11 @@ async def search(term: str):
 		top_k=top_autocomplete_images
 	)
 
-	# Randomly select 5 images id
-	selected_image_ids = np.random.choice(similar_image_ids, 5, replace=False) 
+	# If there are less than 5 similar images, use all of them
+	len_random_image = 5 if len(similar_image_ids) >= 5 else len(similar_image_ids)
+
+	# Randomly select images id
+	selected_image_ids = np.random.choice(similar_image_ids, len_random_image, replace=False)
 
 	# Get caption and object detection result
 	captions = []
@@ -160,8 +164,7 @@ async def search(term: str):
 		captions.append(caption)
 		ods.append(od)
 
-	len_random_image = 5 if len(selected_image_ids) >= 5 else len(selected_image_ids)
-	
+	# Make input message for autocompletion
 	input_message = init_msg + '\n\n' + '--' + '\n'
 	for i in range(len_random_image):
 		input_message += f'Scene #{i+1}' + '\n'
@@ -172,27 +175,29 @@ async def search(term: str):
 	input_message += 'Highlight a completed search phrases using tag <COMPLETED></COMPLETED>' + '\n'
 	input_message += "If the search phrase contains completed information, add other information from caption to make it more detailed using 'and' notation." + '\n'
 	input_message += "Make autocompletion from above 5 scenarios." + '\n'
-	input_message += "Avoid generating the same autocomplete results." + '\n'
-	input_message += "Only give me the completed search phrase."
-
-	print('Input message for autocompletion: ', input_message) 
+	input_message += "Only give me the completed search phrase." + '\n'
+	input_message += "You should make autocomplete results even if the search phrases are longer than 10 words." + '\n'
+	input_message += "Must avoid generating the same autocomplete results."
 
 	# Generate autocompletion
 	messages = [
 		{"role": "user", "content": input_message},
 	]
 
+	# Apply chat template to input messages
 	input_ids = tokenizer.apply_chat_template(
 		messages,
 		add_generation_prompt=True,
 		return_tensors="pt"
 	).to(language_model.device)
 
+	# Terminators for autocompletion
 	terminators = [
 		tokenizer.eos_token_id,
 		tokenizer.convert_tokens_to_ids("<|eot_id|>")
 	]
 
+	# Generate autocompletion
 	outputs = language_model.generate(
 		input_ids,
 		max_new_tokens=max_new_tokens,
@@ -202,9 +207,10 @@ async def search(term: str):
 		top_p=0.9,
 	)
 
+	# Decode autocompletion results
 	response = outputs[0][input_ids.shape[-1]:]
 	decoded_response = tokenizer.decode(response, skip_special_tokens=True)
-	print('Autocomplete results: ', decoded_response)
+	# print('Autocomplete results: ', decoded_response)
 
 	# Get autocompletion results extracting text between <COMPLETED> and </COMPLETED>
 	# Ignore if there is no close tag </COMPLETED>
@@ -245,7 +251,8 @@ async def get_list(text: str):
 		print('Time to search images: ', (time.time() - start_time), 's')
 
 		# Return top-k image paths
-		return [os.path.join('static', images_base, item + '.png') for item in similar_image_ids[:top_similar_images]]
+		# return [os.path.join('static', images_base, item + '.png') for item in similar_image_ids[:top_similar_images]]
+		return [os.path.join('static', images_base, item + '.jpg') for item in similar_image_ids[:top_similar_images]]
 
 	else:
 		return []
@@ -263,5 +270,5 @@ async def log_key_event(request: Request, text: str):
 
 if __name__ == "__main__":
     init()
-    # uvicorn.run(app, port=5001)
+    # uvicorn.run(app, port=8080)
     uvicorn.run(app, host='0.0.0.0', port=8080)
