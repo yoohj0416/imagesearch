@@ -121,7 +121,12 @@ def init():
 
 @app.get('/')
 async def upload_form(request: Request):
-	return templates.TemplateResponse('autocomplete.html', {"request": request})
+	global image_ids
+
+	image_count = len(image_ids)
+	formatted_image_count = "{:,}".format(image_count)
+
+	return templates.TemplateResponse('autocomplete.html', {"request": request, "image_count": formatted_image_count})
 
 @app.get("/search")
 async def search(term: str):

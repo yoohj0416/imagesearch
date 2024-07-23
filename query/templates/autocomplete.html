@@ -204,12 +204,22 @@
 			line-height: 20px;
 			border-radius: 50%;
 		}
+		h2 {
+			margin-bottom: 0;
+		}
+		.image-count-text {
+			margin-top: 0; 
+			text-align: left;
+		}
 	</style>
 </head>
 <body>
 	<div style="width: 600px; margin: auto;">
-		<h2>Image Search with Generative Autocompletion</h2>
-		<div style="width: 800px; margin: auto; display: flex; align-items: center;">
+		<div>
+			<h2>Image Search with Generative Autocompletion</h2>
+			<div style="text-align: left;">Find {{ image_count }} images using text</div>
+		</div>
+		<div style="width: 800px; margin: auto; display: flex; align-items: center; margin-top: 10px;">
 			<!-- <label>Search Here</label>&nbsp;&nbsp; -->
 			<input type="text" name="search" id="searchBox" style="width: 560px" placeholder="Search driving scene. (e.g. a man unloading a truck)"/>
 			<button type="button" id="btnClear">CLEAR</button>
