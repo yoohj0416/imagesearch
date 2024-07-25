@@ -51,7 +51,7 @@ images_base = 'firstframes_jpg'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Make logging file
-log_file_name = 'event.log'
+log_file_name = 'event_w_autocomplete.log'
 if not os.path.exists(log_file_name):
 	with open(log_file_name, 'w') as f:
 		f.write('')
