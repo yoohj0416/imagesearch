@@ -94,6 +94,14 @@
 					$(".ui-autocomplete").css("z-index", 1000);
 				},
 				select: function(event, ui) {
+					selectedTxt = ui.item.value;
+					var wordCount = selectedTxt.split(/\s+/).filter(function(n) { return n != '' }).length;
+					if (wordCount >= 10) {
+						$("#btnClear").prop('disabled', false); // If the number of words is greater than or equal to 10, enable the Clear button
+					} else {
+						$("#btnClear").prop('disabled', true); // Otherwise, disable the Clear button
+					}
+
 					searchBox.val(ui.item.value); // Set the value of the search box to the selected item
 					loadImageList(ui.item.value); // Load the image list based on the selected item
 					event.preventDefault(); // Prevent the default behavior

@@ -45,8 +45,11 @@ images_base = 'firstframes_jpg'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Make logging file
+if not os.path.exists('logs'):
+	os.makedirs('logs')
 log_file_name = 'event_wo_autocomplete.log'
-if not os.path.exists(log_file_name):
+log_file_path = os.path.join('logs', log_file_name)
+if not os.path.exists(log_file_path):
 	with open(log_file_name, 'w') as f:
 		f.write('')
 
@@ -154,7 +157,7 @@ async def log_key_event(request: Request, text: str):
 	client_ip = request.client.host
 	current_time = datetime.now().isoformat()
 
-	with open(log_file_name, 'a') as f:
+	with open(log_file_path, 'a') as f: 
 		f.write(f'Client IP: {client_ip}, Text: {text}, Time: {current_time}, Key event\n')
 
 	print(f'Client IP: {client_ip}, Text: {text}, Time: {current_time}, Key event')
@@ -167,7 +170,7 @@ async def log_clear_event(request: Request, text: str):
 	client_ip = request.client.host
 	current_time = datetime.now().isoformat()
 
-	with open(log_file_name, 'a') as f:
+	with open(log_file_path, 'a') as f:
 		f.write(f'Client IP: {client_ip}, Text: {text}, Time: {current_time}, Clear button event\n')
 
 	print(f'Client IP: {client_ip}, Text: {text}, Time: {current_time}, Clear button event')
