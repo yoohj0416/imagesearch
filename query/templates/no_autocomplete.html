@@ -1,0 +1,170 @@
+<!doctype html>
+<html>
+<head>
+	<title>Autocomplete input suggestion using Python and Flask</title>
+
+	<!-- <div class="loader" id="loader"></div> -->
+
+	<link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.bundle.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+	<script>
+		$(document).ready(function(){
+			var searchBox = $("#searchBox");
+
+			// Function to load image list based on search text
+			function loadImageList(searchTxt) {
+				$.ajax({
+					url: "/get_list",
+					type: "GET",
+					data: {text: searchTxt},
+					success: function(response){
+						$('#imageList').empty(); 
+						$.each(response, function(i, imgUrl) {
+							var image = $("<img>")
+								.attr("src", imgUrl)
+								.attr("width", 320)
+								.attr("height", 240);
+							$('#imageList').append(image);
+						});
+					}
+				});
+			}
+			
+			// Load image list based on search text
+			$("#searchBox").on("input", function(){
+				var searchTxt = $("input[name='search']").val();
+				loadImageList(searchTxt); // Call the function to load image list
+			});
+		});
+	</script>
+	<script>
+		$(document).ready(function(){
+			$("#btnClear").prop('disabled', true);
+
+			$("#searchBox").on("keyup", function() {
+
+				var searchTxt = $(this).val();
+				var wordCount = searchTxt.split(/\s+/).filter(function(n) { return n != '' }).length; // count the number of words in the search box
+				if(wordCount >= 10) {
+					$("#btnClear").prop('disabled', false); // If the number of words is greater than or equal to 10, enable the Clear button
+				} else {
+					$("#btnClear").prop('disabled', true); // Otherwise, disable the Clear button
+				}
+	
+				// AJAX request to log the key event
+				$.ajax({
+					url: "/log_key_event?text=" + encodeURIComponent(searchTxt),
+					type: "GET",
+					success: function(response) {
+						console.log("Key input log saved successfully");
+					},
+					error: function(xhr, status, error) {
+						console.error("Error saving log");
+					}
+				});
+			});
+
+			// Clear button click event
+			$("#btnClear").click(function() {
+				var searchTxt = $("#searchBox").val();
+				
+				// AJAX request to log the clear event
+				$.ajax({
+					url: "/log_clear_event?text=" + encodeURIComponent(searchTxt),
+					type: "GET",
+					success: function(response) {
+						console.log("Clear log saved successfully");
+					},
+					error: function(xhr, status, error) {
+						console.error("Error saving clear log");
+					}
+				});
+
+				$("#searchBox").val(''); // Clear search box
+				$(this).prop('disabled', true); // Disable the Clear button
+				
+				// Trigger input event to update the image list
+				$("#searchBox").trigger("input");
+			});
+		});
+	</script>
+	<script>
+		$(document).ready(function(){
+			$(".help-icon").hover(function(){
+				// Get the position of the help icon
+				var iconPosition = $(this).position();
+				var iconHeight = $(this).outerHeight();
+				$(".tooltip").css({
+				display: "block",
+				top: iconPosition.top + iconHeight + "px", // align tooltip below the help-icon
+				left: iconPosition.left + "px" // align tooltip with the help-icon
+				});
+			}, function(){
+				// Hide the tooltip when the mouse leaves the help icon
+				$(".tooltip").hide();
+			});
+		});
+	</script>
+	<style>
+		#imageList {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: center;
+		}
+		#imageList img {
+			margin: 5px 3px;
+		}
+		.tooltip {
+			display: none;
+			position: absolute;
+			background-color: #f9f9f9;
+			border: 1px solid #d4d4d4;
+			padding: 5px;
+			border-radius: 5px;
+			width: 400px;
+		}
+		.help-icon {
+			cursor: pointer;
+			display: inline-block;
+			background-color: #e0e0e0;
+			width: 20px;
+			height: 20px;
+			text-align: center;
+			line-height: 20px;
+			border-radius: 50%;
+		}
+		h2 {
+			margin-bottom: 0;
+		}
+		.image-count-text {
+			margin-top: 0; 
+			text-align: left;
+		}
+	</style>
+</head>
+<body>
+	<div style="width: 600px; margin: auto;">
+		<div>
+			<h2>Image Search without Autocompletion</h2>
+			<div style="text-align: left;">Find {{ image_count }} images using text</div>
+		</div>
+		<div style="width: 800px; margin: auto; display: flex; align-items: center; margin-top: 10px;">
+			<!-- <label>Search Here</label>&nbsp;&nbsp; -->
+			<input type="text" name="search" id="searchBox" style="width: 560px" placeholder="Search driving scene. (e.g. a man unloading a truck)"/>
+			<button type="button" id="btnClear">CLEAR</button>
+			&nbsp;&nbsp;
+			<div class="help-icon">?</div>
+			<div class="tooltip">
+				<ul>
+					<li>Images are searched based on the calculated similarity between text and image.</li>
+					<li>If you enter more than 10 words, <strong>Clear</strong> button will be activated.</li>
+					<li>Please press the <strong>Clear</strong> button after finishing the current search topic before starting the next search.</li>
+				</ul>
+			</div>
+		</div>
+	</div>
+	<div id="searchResults"></div>
+	<ul id="imageList" style="margin: auto;"></ul>
+</body>
