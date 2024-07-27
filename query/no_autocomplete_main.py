@@ -58,7 +58,7 @@ log_file_name = 'event_wo_autocomplete.log'
 log_file_path = os.path.join(logs_dir, log_file_name)
 # log_file_path = os.path.join('logs', log_file_name)
 if not os.path.exists(log_file_path):
-	with open(log_file_name, 'w') as f:
+	with open(log_file_path, 'w') as f:
 		f.write('')
 
 global embed_model
