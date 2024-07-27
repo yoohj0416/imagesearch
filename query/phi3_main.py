@@ -26,8 +26,12 @@ from datetime import datetime
 
 
 app = FastAPI()
-templates = Jinja2Templates(directory="templates")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+templates_dir = "/home/hojin/imagesearch/query/templates"
+templates = Jinja2Templates(directory=templates_dir)
+# templates = Jinja2Templates(directory="templates")
+static_dir = "/home/hojin/imagesearch/query/static"
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+# app.mount("/static", StaticFiles(directory="static"), name="static")
 # app.mount("/static", StaticFiles(directory="/pool0/data_archive_hojin/drama_data"), name="static")
 
 # Hyperparameters for embedding model
@@ -51,10 +55,14 @@ images_base = 'firstframes_jpg'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Make logging file
-if not os.path.exists('logs'):
-	os.makedirs('logs')
+logs_dir = "/home/hojin/imagesearch/query/logs"
+if not os.path.exists(logs_dir):
+	os.makedirs(logs_dir)
+# if not os.path.exists('logs'):
+	# os.makedirs('logs')
 log_file_name = 'event_w_autocomplete.log'
-log_file_path = os.path.join('logs', log_file_name)
+log_file_path = os.path.join(logs_dir, log_file_name)
+# log_file_path = os.path.join('logs', log_file_name)
 if not os.path.exists(log_file_path):
 	with open(log_file_path, 'w') as f:
 		f.write('')
