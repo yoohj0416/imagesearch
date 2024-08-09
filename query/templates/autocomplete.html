@@ -124,9 +124,15 @@
 			};
 			
 			// Load image list based on search text
+			let debounceTimeout;
+
 			$("#searchBox").on("input", function(){
-				var searchTxt = $("input[name='search']").val();
-				loadImageList(searchTxt); // Call the function to load image list
+				clearTimeout(debounceTimeout);
+
+				debounceTimeout = setTimeout(function(){
+					var searchTxt = $("input[name='search']").val();
+					loadImageList(searchTxt); // Call the function to load image list
+				}, 1000); // 1초 (1000 밀리초) 동안 대기
 			});
 		});
 	</script>
