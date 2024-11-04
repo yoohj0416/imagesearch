@@ -19,7 +19,7 @@ templates = Jinja2Templates(directory=templates_dir)
 static_dir = os.path.join(os.path.dirname(__file__), 'static')
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-phrase_emoji_path = Path(__file__).parent / 'outputs' / 'drama-vid-1k-wRisk-pllava13b-llama3_1_70b-phrase-one-emoji-no-atmo-w-ex.csv'
+phrase_emoji_path = Path(__file__).parent.parent / 'outputs' / 'drama-vid-1k-wRisk-pllava13b-llama3_1_70b-phrase-one-emoji-no-atmo-w-ex.csv'
 
 drama_vid_base = 'drama-video-100-mp4'
 
