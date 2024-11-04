@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+<head>
+    <title>Autocomplete input suggestion using Python and Flask</title>
+
+    <link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js" crossorigin="anonymous"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js" crossorigin="anonymous"></script>
+    <style>
+        #searchBox {
+            width: 560px;
+        }
+        #searchContainer {
+            width: 600px;
+            margin: auto;
+        }
+        #searchResults {
+            width: 800px;
+            margin: auto;
+        }
+        #videoList video {
+            width: 320px;
+            height: 240px;
+            margin: 5px;
+        }
+        .ui-menu-item .ui-menu-item-wrapper {
+            display: flex;
+            align-items: center;
+            white-space: pre-wrap;
+        }
+        .ui-menu-item .icon {
+            margin-right: 10px;
+        }
+        .right-align {
+            text-align: right;
+        }
+    </style>
+    <script>
+        $(function() {
+            $("#searchBox").autocomplete({
+                source: function(request, response) {
+                    $.ajax({
+                        type: "GET",
+                        url: "/search",
+                        dataType: "json",
+                        cache: false,
+                        data: {
+                            term: request.term
+                        },
+                        success: function(data) {
+                            response(data);
+                        },
+                        error: function(jqXHR, textStatus, errorThrown) {
+                            console.log(textStatus + " " + errorThrown);
+                        }
+                    });
+                },
+                minLength: 2,
+                focus: function(event, ui) {
+                    $("#searchBox").val(ui.item.label);
+                    return false;
+                },
+                select: function(event, ui) {
+                    $("#searchBox").val(ui.item.label);
+                    return false;
+                }
+            }).autocomplete("instance")._renderItem = function(ul, item) {
+                var term = $("#searchBox").val().trim();
+                if (term.length > 0) {
+                    var regex = new RegExp('(' + $.ui.autocomplete.escapeRegex(term) + ')', 'gi');
+                    var label = item.value.replace(regex, function(match) {
+                        return "<strong>" + match + "</strong>";
+                    });
+                } else {
+                    var label = item.value;
+                }
+                return $("<li>")
+                    .append(
+                        $("<div class='ui-menu-item-wrapper'>").html(
+                            "<span class='icon'>" + item.emoji + "</span>" + label
+                        )
+                    )
+                    .appendTo(ul);
+            };
+        });
+
+        $(document).ready(function() {
+            $("#btnSearch").click(function() {
+                var searchTxt = $("input[name='search']").val();
+                $.ajax({
+                    url: "/get_list",
+                    type: "POST",
+                    data: { searchTxt: searchTxt },
+                    success: function(response) {
+                        $('#videoList').empty();
+                        $.each(response, function(i, videoUrl) {
+                            var video = $("<video></video>")
+                                .attr("src", videoUrl)
+                                .attr("controls", false)
+                                .on("click", function() {
+                                    if (this.paused) {
+                                        this.play();
+                                    } else {
+                                        this.pause();
+                                    }
+                                });
+                            $('#videoList').append(video);
+                        });
+                    }
+                });
+            });
+        });
+    </script>
+</head>
+<body>
+    <div id="searchContainer">
+        <div style="margin-bottom: 20px;">
+            <h2 style="margin-bottom: 0px;">Search driving scene with Autocompletion and Emojis</h2>
+            <div class="right-align">Emojis are powered by Llama-3.1-70B</div>
+        </div>
+        <div style="display: flex; width: 100%;">
+            <input type="text" name="search" id="searchBox" placeholder="Input driving scene. (e.g. a man unloading a truck)"/>
+            <button type="button" id="btnSearch">Search</button>
+        </div>
+    </div>
+    <div id="searchResults"></div>
+    <ul id="videoList"></ul>
+</body>
+</html>
