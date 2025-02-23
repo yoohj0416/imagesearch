@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+    <title>ID Login</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .container { width: 400px; margin: 100px auto; text-align: center; }
+        input { width: 100%; padding: 10px; margin: 10px 0; }
+        button { padding: 10px 20px; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Please enter your ID</h2>
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+        <form method="post" action="/login">
+            <input type="text" name="user_id" placeholder="5-digit number" pattern="\d{5}" required>
+            <button type="submit">Login</button>
+        </form>
+    </div>
+</body>
+</html>

@@ -1,0 +1,259 @@
+<!doctype html>
+<html>
+<head>
+  <title>User Study – Video Search Task</title>
+  <link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js" crossorigin="anonymous"></script>
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js" crossorigin="anonymous"></script>
+  <style>
+    /* Basic UI styles */
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { text-align: center; }
+    #header { text-align: center; margin-bottom: 20px; font-size: 18px; }
+    #searchContainer { text-align: center; margin-bottom: 20px; }
+    #searchBox { width: 500px; padding: 8px; font-size: 16px; }
+    #btnSearch { padding: 8px 16px; font-size: 16px; }
+    
+    /* Video list: grid container - using 80% of the screen width with reduced gap */
+    #videoList {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 320px));
+      gap: 5px;
+      justify-content: center;
+      margin: 20px auto;
+      width: 90%;
+    }
+    .video-container {
+      position: relative;
+      text-align: center;
+      box-sizing: border-box;
+    }
+    /* Thumbnails and videos are fixed at 320×180px with object-fit: cover for consistent aspect ratio */
+    .video-container img,
+    .video-container video {
+      width: 320px;
+      height: 180px;
+      display: block;
+      margin: auto;
+      object-fit: cover;
+    }
+    /* Play Overlay: display a play icon at the center of the thumbnail */
+    .play-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -80%);
+      pointer-events: none;
+    }
+    .play-overlay img {
+      width: 50px;
+      height: 50px;
+      opacity: 0.8;
+    }
+    /* Select button: placed as a block element below the video */
+    .select-button { 
+      display: block; 
+      margin: 5px auto 0; 
+      padding: 5px 10px; 
+      font-size: 14px; 
+      cursor: pointer; 
+    }
+    
+    /* Overlay styles */
+    #overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      font-size: 22px;
+      text-align: center;
+      padding-top: 25%;
+      display: none;
+      z-index: 1000;
+    }
+    #overlay .overlay-content { margin: 0 auto; max-width: 600px; }
+    #overlay button { margin-top: 20px; padding: 10px 20px; font-size: 18px; border: none; border-radius: 5px; cursor: pointer; }
+  </style>
+  <script>
+    // Utility function: Array shuffle (Fisher-Yates)
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+         const j = Math.floor(Math.random() * (i + 1));
+         [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    // Global variables: define stages and topics
+    var stages = [
+      "without autocompletion",
+      "with text-only autocompletion",
+      "with emoji-text autocompletion"
+    ];
+    var topics = ["pedestrian", "cyclist", "any vehicle", "construction area", "overpass"];
+
+    // Randomize stage order and each stage's topic order
+    var stageOrder = shuffle(stages.slice());
+    var topicsOrder = {};
+    stageOrder.forEach(function(stage) {
+      topicsOrder[stage] = shuffle(topics.slice());
+    });
+
+    // Current state
+    var currentStageIndex = 0;
+    var currentTopicIndex = 0;
+
+    // Function to show overlay (message and "Continue" button)
+    function showOverlay(message, callback) {
+      $("#overlay").html("<div class='overlay-content'><p>" + message + "</p><button id='overlayContinue'>Continue</button></div>");
+      $("#overlay").fadeIn();
+      $("#overlayContinue").on("click", function(){
+        $("#overlay").fadeOut(function(){
+          if (callback) callback();
+        });
+      });
+    }
+
+    // UI update: display current stage and topic in bold
+    function updateUI() {
+      var currentStage = stageOrder[currentStageIndex];
+      var currentTopic = topicsOrder[currentStage][currentTopicIndex];
+      $("#currentStage").html("Stage: <strong>" + currentStage + "</strong>");
+      $("#currentTopic").html("Topic: <strong>" + currentTopic + "</strong>");
+      $("#searchBox").val("");
+      $("#videoList").empty();
+      
+      if (currentStage === "without autocompletion") {
+        if ($("#searchBox").data("ui-autocomplete")) {
+          $("#searchBox").autocomplete("destroy");
+        }
+      } else if (currentStage === "with text-only autocompletion") {
+        $("#searchBox").autocomplete({
+          source: "/search_text",
+          minLength: 2,
+          select: function(event, ui) {
+            $("#searchBox").val(ui.item.label);
+            return false;
+          }
+        });
+      } else if (currentStage === "with emoji-text autocompletion") {
+        $("#searchBox").autocomplete({
+          source: "/search_emoji",
+          minLength: 2,
+          select: function(event, ui) {
+            $("#searchBox").val(ui.item.label);
+            return false;
+          }
+        }).autocomplete("instance")._renderItem = function(ul, item) {
+          var term = $("#searchBox").val().trim();
+          var label = term.length > 0 ?
+              item.label.replace(new RegExp('(' + $.ui.autocomplete.escapeRegex(term) + ')', 'gi'), "<strong>$1</strong>") :
+              item.label;
+          return $("<li>")
+              .append($("<div class='ui-menu-item-wrapper'>")
+                  .html("<span class='icon'>" + (item.emoji ? item.emoji : "") + "</span>" + label))
+              .appendTo(ul);
+        };
+      }
+    }
+
+    // Function to proceed to the next topic or stage
+    function nextTopic() {
+      var currentStage = stageOrder[currentStageIndex];
+      currentTopicIndex++;
+      if (currentTopicIndex >= topicsOrder[currentStage].length) {
+          currentStageIndex++;
+          currentTopicIndex = 0;
+          if (currentStageIndex >= stageOrder.length) {
+              showOverlay("User study complete. Thank you!");
+              return;
+          } else {
+              var newStage = stageOrder[currentStageIndex];
+              showOverlay("Stage complete. Moving to the next stage.<br>New stage: <strong>" + newStage + "</strong>", function(){
+                  updateUI();
+              });
+          }
+      } else {
+          var nextTopicName = topicsOrder[currentStage][currentTopicIndex];
+          showOverlay("Topic complete. Moving to the next topic.<br>Next topic: <strong>" + nextTopicName + "</strong>", function(){
+              updateUI();
+          });
+      }
+    }
+
+    // Function to generate video list from actual search results
+    function populateVideoList() {
+      var searchText = $("#searchBox").val();
+      $.ajax({
+        type: "POST",
+        url: "/get_list",
+        data: { searchTxt: searchText },
+        success: function(response) {
+          var container = $("#videoList");
+          container.empty();
+          // response: list of objects each with { video_url: ..., thumbnail_url: ... }
+          response.forEach(function(item) {
+            var videoUrl = item.video_url;
+            var thumbnailUrl = item.thumbnail_url;
+            var videoContainer = $("<div class='video-container'></div>");
+            var thumbnail = $("<img>")
+              .attr("src", thumbnailUrl)
+              .css({ "cursor": "pointer" });
+            // Add play overlay to the thumbnail
+            var playOverlay = $("<div class='play-overlay'><img src='/static/icon/play-button.png' alt='Play'/></div>");
+            // On thumbnail click, replace with video element while maintaining size 320×180
+            thumbnail.on("click", function(){
+              var videoElem = $("<video></video>")
+                .attr("src", videoUrl)
+                .attr("controls", true)
+                .css({"width": "320px", "height": "180px"});
+              // Remove play overlay when video is played
+              videoContainer.find(".play-overlay").remove();
+              $(this).replaceWith(videoElem);
+              videoElem.get(0).play();
+            });
+            var selectBtn = $("<button class='select-button'>Select</button>")
+              .on("click", function(){
+                nextTopic();
+              });
+            videoContainer.append(thumbnail).append(playOverlay).append(selectBtn);
+            container.append(videoContainer);
+          });
+        },
+        error: function(err) {
+          console.log("Error in get_list:", err);
+        }
+      });
+    }
+
+    $(document).ready(function(){
+      // On page load, show overlay with current stage and topic (displayed in bold)
+      var currentStage = stageOrder[currentStageIndex];
+      var currentTopic = topicsOrder[currentStage][currentTopicIndex];
+      showOverlay("Stage: <strong>" + currentStage + "</strong><br>Topic: <strong>" + currentTopic + "</strong>", function(){
+          updateUI();
+      });
+
+      // On search button click, generate video list from actual search results
+      $("#btnSearch").on("click", function(){
+        populateVideoList();
+      });
+    });
+  </script>
+</head>
+<body>
+  <h1>User Study: Video Search Task</h1>
+  <div id="header">
+    <span id="currentStage"></span> | <span id="currentTopic"></span>
+  </div>
+  <div id="searchContainer">
+    <div style="display: flex; justify-content: center; width: 100%;">
+      <input type="text" name="search" id="searchBox" placeholder="Enter search query..." />
+      <button type="button" id="btnSearch">Search</button>
+    </div>
+  </div>
+  <div id="videoList"></div>
+  <!-- Overlay for stage/topic instructions -->
+  <div id="overlay"></div>
+</body>
+</html>

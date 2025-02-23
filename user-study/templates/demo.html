@@ -1,0 +1,344 @@
+<!doctype html>
+<html>
+<head>
+  <title>User Study – Video Search Task</title>
+  <link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js" crossorigin="anonymous"></script>
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js" crossorigin="anonymous"></script>
+  <style>
+    /* Basic UI styles (similar to emoji_autocomplete.html) */
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { text-align: center; }
+    #header { text-align: center; margin-bottom: 20px; font-size: 18px; }
+    #searchContainer { text-align: center; margin-bottom: 20px; }
+    #searchBox { width: 500px; padding: 8px; font-size: 16px; }
+    #btnSearch { padding: 8px 16px; font-size: 16px; }
+    #searchResults { width: 800px; margin: 20px auto; text-align: center; }
+    
+    /* #videoList: Set generous max-width and arrange items in rows using flex layout */
+    #videoList {
+      width: 100%;
+      max-width: 1600px;
+      margin: 20px auto;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+    }
+    /* Arrange video containers in 5 per row (using calc to account for spacing) */
+    .video-container {
+      flex: 0 0 calc(20% - 20px);
+      margin: 10px;
+      text-align: center;
+    }
+    /* All thumbnails and videos are set to fill container width */
+    .video-container img,
+    .video-container video {
+      width: 100%;
+      display: block;
+      margin: auto;
+    }
+    /* Select button: displayed as a block element below the video */
+    .select-button {
+      margin-top: 5px;
+      padding: 5px 10px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .right-align { text-align: right; }
+    
+    /* Tooltip (message box) styles */
+    .demo-tooltip {
+      position: absolute;
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 10px;
+      padding-bottom: 40px; /* Space for the Next button */
+      border-radius: 5px;
+      box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+      z-index: 1001;
+      max-width: 250px;
+    }
+    .demo-tooltip:after { display: none; }
+    #tooltipNext {
+      position: absolute;
+      bottom: 5px;
+      right: 5px;
+    }
+    
+    /* Overlay styles */
+    .overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 1002;
+      display: none;
+      color: #fff;
+      font-size: 20px;
+      text-align: center;
+      padding-top: 20%;
+    }
+    /* Button styles within overlay */
+    #welcomeOverlay button,
+    #finalOverlay button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 18px;
+      background: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    /* Arrange final overlay buttons horizontally */
+    #finalOverlay div { display: inline-block; }
+    #finalOverlay button { margin: 0 10px; }
+  </style>
+  <script>
+    $(function() {
+
+      // --- Define demo steps ---
+      var demoState = {
+          currentStep: 0,
+          steps: [
+              {
+                  // Step 1: Input field instruction (with "at least 5 words" in bold)
+                  element: "#searchBox",
+                  text: "Enter a search query for a driving scene on the given topic using <strong>at least 5 words</strong>.",
+                  event: "input",
+                  condition: function() {
+                      return $("#searchBox").val().trim().split(/\s+/).length >= 5;
+                  }
+              },
+              {
+                  // Step 2: Search button instruction
+                  element: "#btnSearch",
+                  text: "After completing your text query, click the search button to display a video list.",
+                  event: "click"
+              },
+              {
+                  // Step 3: Video list instruction (click each thumbnail sequentially)
+                  element: "#videoList .video-container:first-child img, #videoList .video-container:first-child video",
+                  text: "A video list is shown. Click on each thumbnail sequentially to load and play the corresponding video.",
+                  event: "click"
+              },
+              {
+                  // Step 4: Select button instruction
+                  element: "#videoList .video-container:first-child .select-button",
+                  text: "If you think the video is related to your search phrase, click the select button below the video and go to the next topic.",
+                  event: "click"
+              }
+          ]
+      };
+
+      // --- Welcome Overlay: Display demo start instructions on page load ---
+      function showWelcomeOverlay() {
+          $("#welcomeOverlay").fadeIn();
+      }
+
+      // --- Final Overlay: Options after demo completion ---
+      function showFinalOverlay() {
+          $("#finalOverlay").fadeIn();
+      }
+
+      // --- Function to proceed to next demo step ---
+      function nextDemoStep() {
+          demoState.currentStep++;
+          $(".demo-tooltip").remove();
+          if (demoState.currentStep < demoState.steps.length) {
+              var step = demoState.steps[demoState.currentStep];
+              if (step.event === "click") {
+                  $(step.element).one("click.demo", function() {
+                      nextDemoStep();
+                  });
+              }
+              showTooltip(step);
+          } else {
+              showFinalOverlay();
+          }
+      }
+
+      // --- Function to display tooltip for current demo step ---
+      function showTooltip(step) {
+          $(".demo-tooltip").remove();
+          var $target = $(step.element);
+          if ($target.length === 0) {
+              nextDemoStep();
+              return;
+          }
+          var offset = $target.offset();
+          var tooltip = $("<div class='demo-tooltip'></div>");
+          var textDiv = $("<div class='tooltip-text'></div>").html(step.text);
+          var nextButton = $("<button id='tooltipNext'>Next</button>");
+          tooltip.append(textDiv).append(nextButton);
+          $("body").append(tooltip);
+          
+          // Position: below input field, to the right for others
+          if (step.element === "#searchBox") {
+              tooltip.css({
+                  top: offset.top + $target.outerHeight() + 10,
+                  left: offset.left
+              });
+          } else {
+              tooltip.css({
+                  top: offset.top,
+                  left: offset.left + $target.outerWidth() + 10
+              });
+          }
+          
+          nextButton.on("click", function(e) {
+              e.stopPropagation();
+              // For each step: if input field, fill value; if search button, generate video list
+              if (step.element === "#searchBox") {
+                  $("#searchBox").val("a man unloading a truck");
+              }
+              if (step.element === "#btnSearch") {
+                  populateVideoList();
+              }
+              nextDemoStep();
+          });
+          
+          if (step.event === "input") {
+              $target.on("input.demo", function() {
+                  if (step.condition && step.condition()) {
+                      $target.off("input.demo");
+                      nextDemoStep();
+                  }
+              });
+          }
+      }
+
+      // --- Function to generate video list ---
+      function populateVideoList() {
+          var videos = [
+              "2020-0127-132751-002348.mp4",
+              "2020-0127-132751-003557.mp4",
+              "2020-0127-132751-003604.mp4",
+              "2020-0127-132751-009980.mp4",
+              "2020-0127-132751-018400.mp4"
+          ];
+          var videoListContainer = $("#videoList");
+          videoListContainer.empty();
+          videos.forEach(function(videoFile) {
+              var videoSrc = "static/drama-1k-vids/" + videoFile;
+              var thumbnailSrc = "static/drama-1k-imgs/" + videoFile.replace(".mp4", ".jpg");
+              var container = $("<div class='video-container'></div>");
+              
+              var thumbnail = $("<img>")
+                  .attr("src", thumbnailSrc)
+                  .css({ "cursor": "pointer" });
+              
+              (function(videoSrc, thumbnail) {
+                  thumbnail.on("click", function(){
+                      var videoElem = $("<video></video>")
+                          .attr("src", videoSrc)
+                          .attr("controls", true)
+                          .css({"width": "320px", "height": "180px"});
+                      $(this).replaceWith(videoElem);
+                      videoElem.get(0).play();
+                  });
+              })(videoSrc, thumbnail);
+              
+              var selectBtn = $("<button class='select-button'>Select</button>")
+                  .on("click", function() {
+                      if (demoState.currentStep === 3) {
+                          nextDemoStep();
+                      }
+                  });
+              
+              container.append(thumbnail).append(selectBtn);
+              videoListContainer.append(container);
+          });
+      }
+
+      // --- Overlay button events ---
+      $("#welcomeStartDemoButton").on("click", function() {
+          $("#welcomeOverlay").fadeOut(function(){
+              demoState.currentStep = 0;
+              showTooltip(demoState.steps[demoState.currentStep]);
+          });
+      });
+      $("#retryDemoButton").on("click", function() {
+          $("#finalOverlay").fadeOut(function(){
+              demoState.currentStep = 0;
+              showTooltip(demoState.steps[demoState.currentStep]);
+          });
+      });
+      $("#startTestButton").on("click", function() {
+          window.location.href = "emoji_autocomplete";
+      });
+      
+      // --- Autocomplete functionality (for demo) ---
+      $("#searchBox").autocomplete({
+          source: function(request, response) {
+              $.ajax({
+                  type: "GET",
+                  url: "/search",
+                  dataType: "json",
+                  cache: false,
+                  data: { term: request.term },
+                  success: function(data) { response(data); },
+                  error: function(jqXHR, textStatus, errorThrown) {
+                      console.log(textStatus + " " + errorThrown);
+                  }
+              });
+          },
+          minLength: 2,
+          focus: function(event, ui) {
+              $("#searchBox").val(ui.item.label);
+              return false;
+          },
+          select: function(event, ui) {
+              $("#searchBox").val(ui.item.label);
+              return false;
+          }
+      }).autocomplete("instance")._renderItem = function(ul, item) {
+          var term = $("#searchBox").val().trim();
+          var label = term.length > 0 ?
+              item.value.replace(new RegExp('(' + $.ui.autocomplete.escapeRegex(term) + ')', 'gi'), "<strong>$1</strong>") :
+              item.value;
+          return $("<li>")
+              .append($("<div class='ui-menu-item-wrapper'>")
+                      .html("<span class='icon'>" + (item.emoji ? item.emoji : "") + "</span>" + label))
+              .appendTo(ul);
+      };
+      
+      // Display Welcome Overlay on page load
+      function showWelcomeOverlay() {
+          $("#welcomeOverlay").fadeIn();
+      }
+      showWelcomeOverlay();
+    });
+  </script>
+</head>
+<body>
+  <!-- Welcome Overlay -->
+  <div id="welcomeOverlay" class="overlay">
+      <div>
+          <p>Welcome to the demo. Before starting the user study, we will guide you through the main elements of this page so you can become familiar with its functionality.</p>
+          <button id="welcomeStartDemoButton">Start Demo</button>
+      </div>
+  </div>
+
+  <!-- Final Overlay -->
+  <div id="finalOverlay" class="overlay">
+      <div>
+          <p>Demo complete. What would you like to do next?</p>
+          <button id="retryDemoButton">Retry Demo</button>
+          <button id="startTestButton">Start Test</button>
+      </div>
+  </div>
+
+  <div id="searchContainer">
+      <div style="margin-bottom: 20px;">
+          <h2 style="margin-bottom: 0px; text-align: center;">Autocompletion for Driving Scenes with Emojis</h2>
+          <div class="right-align">Emojis are powered by Llama-3.1-70B</div>
+      </div>
+      <div style="display: flex; justify-content: center; width: 100%;">
+          <input type="text" name="search" id="searchBox" placeholder="Enter search query..." />
+          <button type="button" id="btnSearch">Search</button>
+      </div>
+  </div>
+  <div id="videoList"></div>
+  <!-- Overlay: stage/topic instruction -->
+  <div id="overlay"></div>
+</body>
+</html>
