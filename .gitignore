@@ -1,2 +1,3 @@
 query/static/firstframes*
 query/logs/*
+user-study/logs/*.csv

@@ -14,7 +14,7 @@
     #searchBox { width: 500px; padding: 8px; font-size: 16px; }
     #btnSearch { padding: 8px 16px; font-size: 16px; }
     
-    /* Video list: grid container - using 80% of the screen width with reduced gap */
+    /* Video list: grid container using 90% width with reduced gaps */
     #videoList {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 320px));
@@ -28,7 +28,7 @@
       text-align: center;
       box-sizing: border-box;
     }
-    /* Thumbnails and videos are fixed at 320×180px with object-fit: cover for consistent aspect ratio */
+    /* Thumbnails and videos fixed at 320×180 with object-fit: cover */
     .video-container img,
     .video-container video {
       width: 320px;
@@ -37,12 +37,12 @@
       margin: auto;
       object-fit: cover;
     }
-    /* Play Overlay: display a play icon at the center of the thumbnail */
+    /* Play Overlay: display play icon at center of thumbnail */
     .play-overlay {
       position: absolute;
-      top: 50%;
+      top: 45%;
       left: 50%;
-      transform: translate(-50%, -80%);
+      transform: translate(-50%, -50%);
       pointer-events: none;
     }
     .play-overlay img {
@@ -84,64 +84,155 @@
       return array;
     }
 
-    // Global variables: define stages and topics
-    var stages = [
-      "without autocompletion",
-      "with text-only autocompletion",
-      "with emoji-text autocompletion"
-    ];
-    var topics = ["pedestrian", "cyclist", "any vehicle", "construction area", "overpass"];
+    // Retrieve test_group from server (template variable)
+    var testGroup = "{{ test_group }}"; // "text_only" or "emoji_text"
+    // Global variable for current dataset; initially "drama"
+    var currentDataset = "drama";
 
-    // Randomize stage order and each stage's topic order
-    var stageOrder = shuffle(stages.slice());
+    // Function to return the Task label (in bold) based on current dataset
+    function getTaskLabel() {
+      if (currentDataset === "drama") {
+        return "<strong>Driving Scene Video Search</strong>";
+      } else if (currentDataset === "msvd") {
+        return "<strong>Online Video Search</strong>";
+      } else {
+        return "";
+      }
+    }
+
+    // Function to get topics for each dataset independently
+    function getTopicsForDataset(dataset) {
+      if (dataset === "drama") {
+        return ["intersection", "parking", "pedestrian interaction", "tunnel & bridge driving", "construction zones"];
+      } else if (dataset === "msvd") {
+        return ["cooking", "fitness", "music and dance", "animal & pet videos", "sports highlights"];
+      }
+      return [];
+    }
+
+    // Define stage order based on test group:
+    // For "text_only": ["without autocompletion", "text-only autocompletion"]
+    // For "emoji_text": ["without autocompletion", "emoji-text autocompletion"]
+    var stages;
+    if (testGroup === "text_only") {
+      stages = ["without autocompletion", "text-only autocompletion"];
+    } else if (testGroup === "emoji_text") {
+      stages = ["without autocompletion", "emoji-text autocompletion"];
+    } else {
+      stages = ["without autocompletion", "text-only autocompletion"];
+    }
+    
+    // Initialize topics for current dataset and randomize for each stage
+    var topics = getTopicsForDataset(currentDataset);
     var topicsOrder = {};
-    stageOrder.forEach(function(stage) {
+    stages.forEach(function(stage) {
       topicsOrder[stage] = shuffle(topics.slice());
     });
-
-    // Current state
+    
+    // Overall study: each user goes through 2 stages for "drama" then 2 for "msvd"
     var currentStageIndex = 0;
     var currentTopicIndex = 0;
-
-    // Function to show overlay (message and "Continue" button)
+    
+    // Logging function: sends event data to /log_event endpoint
+    function logEvent(eventType, details) {
+      var payload = {
+        timestamp: new Date().toISOString(),
+        event_type: eventType,
+        stage: $("#currentStage").text().replace("Stage: ", "").trim(),
+        topic: $("#currentTopic").text().replace("Topic: ", "").trim(),
+        details: details
+      };
+      $.ajax({
+        type: "POST",
+        url: "/log_event",
+        contentType: "application/json",
+        data: JSON.stringify(payload),
+        success: function(response) {
+          console.log("Logged event: " + eventType);
+        },
+        error: function(err) {
+          console.log("Log event error:", err);
+        }
+      });
+    }
+    
+    // Function to show overlay with a message and a "Continue" button.
+    // Parameter showTask (boolean) determines whether to include the Task line.
     function showOverlay(message, callback) {
-      $("#overlay").html("<div class='overlay-content'><p>" + message + "</p><button id='overlayContinue'>Continue</button></div>");
+      var fullMessage = "";
+      fullMessage += message;
+      $("#overlay").html("<div class='overlay-content'><p>" + fullMessage + "</p><button id='overlayContinue'>Continue</button></div>");
       $("#overlay").fadeIn();
       $("#overlayContinue").on("click", function(){
         $("#overlay").fadeOut(function(){
+          logEvent("topic_start", {});
           if (callback) callback();
         });
       });
     }
-
-    // UI update: display current stage and topic in bold
+    
+    // UI update: display current stage, topic (with numbering) and current Task in bold
     function updateUI() {
-      var currentStage = stageOrder[currentStageIndex];
+      var currentStage = stages[currentStageIndex];
+      var totalTopics = topicsOrder[currentStage].length;
       var currentTopic = topicsOrder[currentStage][currentTopicIndex];
       $("#currentStage").html("Stage: <strong>" + currentStage + "</strong>");
-      $("#currentTopic").html("Topic: <strong>" + currentTopic + "</strong>");
+      $("#currentTopic").html("Topic (" + (currentTopicIndex+1) + " of " + totalTopics + "): <strong>" + currentTopic + "</strong>");
+      $("#currentTask").html(getTaskLabel());
       $("#searchBox").val("");
       $("#videoList").empty();
+      logEvent("topic_start", { stage: currentStage, topic: currentTopic });
       
+      // Set up autocomplete based on current stage and current dataset
       if (currentStage === "without autocompletion") {
         if ($("#searchBox").data("ui-autocomplete")) {
           $("#searchBox").autocomplete("destroy");
         }
-      } else if (currentStage === "with text-only autocompletion") {
+      } else if (currentStage === "text-only autocompletion") {
         $("#searchBox").autocomplete({
-          source: "/search_text",
+          source: function(request, response) {
+            $.ajax({
+              type: "GET",
+              url: "/search_text",
+              data: { term: request.term, dataset: currentDataset },
+              success: function(data) { response(data); },
+              error: function(jqXHR, textStatus, errorThrown) {
+                console.log(textStatus + " " + errorThrown);
+              }
+            });
+          },
           minLength: 2,
           select: function(event, ui) {
-            $("#searchBox").val(ui.item.label);
+            $("#searchBox").val(ui.item.label).trigger("input");
+            logEvent("autocomplete_select", { selected: ui.item.label });
             return false;
           }
-        });
-      } else if (currentStage === "with emoji-text autocompletion") {
+        }).autocomplete("instance")._renderItem = function(ul, item) {
+          var term = $("#searchBox").val().trim();
+          var label = term.length > 0 ?
+              item.label.replace(new RegExp('(' + $.ui.autocomplete.escapeRegex(term) + ')', 'gi'), "<strong>$1</strong>") :
+              item.label;
+          return $("<li>")
+              .append($("<div class='ui-menu-item-wrapper'>").html(label))
+              .appendTo(ul);
+        };
+      } else if (currentStage === "emoji-text autocompletion") {
         $("#searchBox").autocomplete({
-          source: "/search_emoji",
+          source: function(request, response) {
+            $.ajax({
+              type: "GET",
+              url: "/search_emoji",
+              data: { term: request.term, dataset: currentDataset },
+              success: function(data) { response(data); },
+              error: function(jqXHR, textStatus, errorThrown) {
+                console.log(textStatus + " " + errorThrown);
+              }
+            });
+          },
           minLength: 2,
           select: function(event, ui) {
-            $("#searchBox").val(ui.item.label);
+            $("#searchBox").val(ui.item.label).trigger("input");
+            logEvent("autocomplete_select", { selected: ui.item.label });
             return false;
           }
         }).autocomplete("instance")._renderItem = function(ul, item) {
@@ -151,69 +242,101 @@
               item.label;
           return $("<li>")
               .append($("<div class='ui-menu-item-wrapper'>")
-                  .html("<span class='icon'>" + (item.emoji ? item.emoji : "") + "</span>" + label))
+                      .html("<span class='icon'>" + (item.emoji ? item.emoji : "") + "</span>" + label))
               .appendTo(ul);
         };
       }
     }
-
+    
     // Function to proceed to the next topic or stage
     function nextTopic() {
-      var currentStage = stageOrder[currentStageIndex];
+      console.log("Next topic called. Current Stage Index:", currentStageIndex, "Current Topic Index:", currentTopicIndex);
+      var currentStage = stages[currentStageIndex];
       currentTopicIndex++;
       if (currentTopicIndex >= topicsOrder[currentStage].length) {
           currentStageIndex++;
           currentTopicIndex = 0;
-          if (currentStageIndex >= stageOrder.length) {
-              showOverlay("User study complete. Thank you!");
-              return;
+          if (currentStageIndex >= stages.length) {
+              // Finished current dataset stages; if currentDataset is "drama", switch to "msvd"
+              if (currentDataset === "drama") {
+                currentDataset = "msvd";
+                topics = getTopicsForDataset("msvd");
+                if (testGroup === "text_only") {
+                  stages = ["without autocompletion", "text-only autocompletion"];
+                } else if (testGroup === "emoji_text") {
+                  stages = ["without autocompletion", "emoji-text autocompletion"];
+                } else {
+                  stages = ["without autocompletion", "text-only autocompletion"];
+                }
+                topicsOrder = {};
+                stages.forEach(function(stage) {
+                  topicsOrder[stage] = shuffle(getTopicsForDataset("msvd"));
+                });
+                currentStageIndex = 0;
+                currentTopicIndex = 0;
+                var newStage = stages[currentStageIndex];
+                var totalTopics = topicsOrder[newStage].length;
+                var newTopic = topicsOrder[newStage][0];
+                showOverlay("Task complete. Moving to the next task.<br>Task: " + getTaskLabel() + "<br>Stage: <strong>" + newStage + "</strong><br>Topic (1 of " + totalTopics + "): <strong>" + newTopic + "</strong>", function(){
+                    updateUI();
+                }, true);
+                logEvent("dataset_change", { new_dataset: "msvd" });
+              } else {
+                showOverlay("User study complete. Thank you!", function(){}, true);
+                logEvent("study_complete", {});
+                return;
+              }
           } else {
-              var newStage = stageOrder[currentStageIndex];
-              showOverlay("Stage complete. Moving to the next stage.<br>New stage: <strong>" + newStage + "</strong>", function(){
+              var newStage = stages[currentStageIndex];
+              var totalTopics = topicsOrder[newStage].length;
+              var newTopic = topicsOrder[newStage][0];
+              showOverlay("Stage complete. Moving to the next stage.<br>Stage: <strong>" + newStage + "</strong><br>Topic (1 of " + totalTopics + "): <strong>" + newTopic + "</strong>", function(){
                   updateUI();
-              });
+              }, false);
+              logEvent("stage_change", { new_stage: newStage });
           }
       } else {
           var nextTopicName = topicsOrder[currentStage][currentTopicIndex];
-          showOverlay("Topic complete. Moving to the next topic.<br>Next topic: <strong>" + nextTopicName + "</strong>", function(){
+          var totalTopics = topicsOrder[currentStage].length;
+          showOverlay("Topic complete. Moving to the next topic.<br>Topic (" + (currentTopicIndex+1) + " of " + totalTopics + "): <strong>" + nextTopicName + "</strong>", function(){
               updateUI();
-          });
+          }, false);
+          logEvent("topic_change", { new_topic: nextTopicName });
       }
     }
-
+    
     // Function to generate video list from actual search results
     function populateVideoList() {
       var searchText = $("#searchBox").val();
+      logEvent("search_button_clicked", { query: searchText, dataset: currentDataset });
       $.ajax({
         type: "POST",
         url: "/get_list",
-        data: { searchTxt: searchText },
+        data: { searchTxt: searchText, dataset: currentDataset },
         success: function(response) {
           var container = $("#videoList");
           container.empty();
-          // response: list of objects each with { video_url: ..., thumbnail_url: ... }
-          response.forEach(function(item) {
+          response.forEach(function(item, index) {
             var videoUrl = item.video_url;
             var thumbnailUrl = item.thumbnail_url;
             var videoContainer = $("<div class='video-container'></div>");
             var thumbnail = $("<img>")
               .attr("src", thumbnailUrl)
               .css({ "cursor": "pointer" });
-            // Add play overlay to the thumbnail
             var playOverlay = $("<div class='play-overlay'><img src='/static/icon/play-button.png' alt='Play'/></div>");
-            // On thumbnail click, replace with video element while maintaining size 320×180
             thumbnail.on("click", function(){
               var videoElem = $("<video></video>")
                 .attr("src", videoUrl)
                 .attr("controls", true)
                 .css({"width": "320px", "height": "180px"});
-              // Remove play overlay when video is played
               videoContainer.find(".play-overlay").remove();
               $(this).replaceWith(videoElem);
               videoElem.get(0).play();
+              logEvent("video_played", { video_url: videoUrl, index: index, dataset: currentDataset });
             });
             var selectBtn = $("<button class='select-button'>Select</button>")
               .on("click", function(){
+                logEvent("select_clicked", { video_index: videoContainer.index(), dataset: currentDataset });
                 nextTopic();
               });
             videoContainer.append(thumbnail).append(playOverlay).append(selectBtn);
@@ -225,18 +348,30 @@
         }
       });
     }
-
+    
     $(document).ready(function(){
-      // On page load, show overlay with current stage and topic (displayed in bold)
-      var currentStage = stageOrder[currentStageIndex];
+      // On page load, show overlay with Task, current stage and topic (with topic number)
+      var currentStage = stages[currentStageIndex];
+      var totalTopics = topicsOrder[currentStage].length;
       var currentTopic = topicsOrder[currentStage][currentTopicIndex];
-      showOverlay("Stage: <strong>" + currentStage + "</strong><br>Topic: <strong>" + currentTopic + "</strong>", function(){
+      showOverlay("Stage: <strong>" + currentStage + "</strong><br>Topic (1 of " + totalTopics + "): <strong>" + currentTopic + "</strong>", function(){
           updateUI();
+      }, true);
+      
+      // Log each keystroke in the search box and enable search button only when at least 3 words are entered
+      $("#searchBox").on("input", function(){
+          logEvent("input_text", { text: $(this).val(), dataset: currentDataset });
+          var words = $(this).val().trim().split(/\s+/);
+          if (words.length < 3) {
+              $("#btnSearch").prop("disabled", true);
+          } else {
+              $("#btnSearch").prop("disabled", false);
+          }
       });
-
+      
       // On search button click, generate video list from actual search results
       $("#btnSearch").on("click", function(){
-        populateVideoList();
+          populateVideoList();
       });
     });
   </script>
@@ -244,16 +379,18 @@
 <body>
   <h1>User Study: Video Search Task</h1>
   <div id="header">
-    <span id="currentStage"></span> | <span id="currentTopic"></span>
+    <div id="currentTask"></div>
+    <div id="stage-topic">
+      <span id="currentStage"></span> | <span id="currentTopic"></span>
+    </div>
   </div>
   <div id="searchContainer">
     <div style="display: flex; justify-content: center; width: 100%;">
       <input type="text" name="search" id="searchBox" placeholder="Enter search query..." />
-      <button type="button" id="btnSearch">Search</button>
+      <button type="button" id="btnSearch" disabled>Search</button>
     </div>
   </div>
   <div id="videoList"></div>
-  <!-- Overlay for stage/topic instructions -->
   <div id="overlay"></div>
 </body>
 </html>
