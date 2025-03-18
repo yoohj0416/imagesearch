@@ -37,6 +37,9 @@ model = None
 # video_embeddings is a dictionary with keys "drama" and "msvd"
 video_embeddings = {"drama": {}, "msvd": {}}
 
+group_text_only = {"12345", "48361", "38746", "72849", "29850", "76829", "19381", "27457", "91837", "15738", "85831", "49384", "48749"}
+group_emoji_text = {"67890", "82946", "37492", "81645", "98187", "10983", "28378", "19273", "91981", "34276", "94727", "12782", "26561"}
+
 def load_dataset(csv_path):
     # Read CSV using utf-8-sig and strip column names
     df = pd.read_csv(csv_path, encoding='utf-8-sig')
@@ -104,8 +107,8 @@ async def login_form(request: Request):
 @app.post("/login")
 async def login(request: Request, user_id: str = Form(...)):
     # Define groups: text_only and emoji_text
-    group_text_only = {"12345", "54321"}
-    group_emoji_text = {"67890", "09876", "11223"}
+    # group_text_only = {"12345", "54321"}
+    # group_emoji_text = {"67890", "09876", "11223"}
     if user_id in group_text_only or user_id in group_emoji_text:
         request.session["user_id"] = user_id
         if user_id in group_text_only:
