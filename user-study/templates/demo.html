@@ -9,38 +9,75 @@
     body { font-family: Arial, sans-serif; margin: 20px; }
     h1 { text-align: center; }
     #header { text-align: center; margin-bottom: 20px; font-size: 18px; }
-    /* 텍스트가 내용만큼의 너비를 갖도록 수정 */
+    /* Only display currentTask and currentTopic (no stage) */
     #header #currentTask { margin-bottom: 5px; display: inline-block; }
     #stage-topic { font-size: 16px; display: block; }
     #searchContainer { text-align: center; margin-bottom: 20px; }
     #searchBox { width: 500px; padding: 8px; font-size: 16px; }
     #btnSearch { padding: 8px 16px; font-size: 16px; }
+    
+    /* Video list container occupies 60% of page width */
     #videoList {
-      width: 100%;
-      max-width: 1600px;
+      width: 60%;
       margin: 20px auto;
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
     }
-    .video-container {
-      flex: 0 0 calc(20% - 20px);
-      margin: 10px;
+    /* Each video row: flex container in row direction */
+    .video-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      border-bottom: 1px solid #ccc;
+      padding: 10px 0;
+    }
+    /* Select container: fixed width (80px) on left */
+    .select-container {
+      flex: 0 0 80px;
       text-align: center;
     }
-    .video-container img,
-    .video-container video {
-      width: 100%;
-      display: block;
-      margin: auto;
+    /* Video thumbnail container: 340x190 */
+    .video-thumbnail {
+      flex: 0 0 340px;
+      height: 190px;
+      position: relative;
+      margin-right: 20px;
+    }
+    .video-thumbnail img,
+    .video-thumbnail video {
+      width: 340px;
+      height: 190px;
+      object-fit: cover;
+    }
+    .play-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .play-overlay img {
+      width: 50px;
+      height: 50px;
+      opacity: 0.8;
+    }
+    /* Description container: generic placeholder text */
+    .video-description {
+      flex: 1;
+      font-size: 16px;
+      color: #333;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
     }
     .select-button {
-      margin-top: 5px;
       padding: 5px 10px;
       font-size: 14px;
       cursor: pointer;
+      margin-bottom: 5px;
     }
-    /* Tooltip */
+    
+    /* Tooltip styles (unchanged) */
     .demo-tooltip {
       position: absolute;
       background: #fff;
@@ -82,9 +119,9 @@
     #finalOverlay button { margin: 0 10px; }
   </style>
   <script>
-    // Basic Task/Stage/Topic
+    // Basic demo variables and functions (for tooltips)
     var currentDataset = "drama";
-    var currentStage = "without autocompletion";
+    var currentStage = "without autocompletion"; // not displayed now
     var currentTopic = "pedestrian";
     function getTaskLabel() {
       if (currentDataset === "drama") {
@@ -95,20 +132,18 @@
     }
     function updateUI() {
       $("#currentTask").html("Task: " + getTaskLabel());
-      $("#currentStage").html("Stage: <strong>" + currentStage + "</strong>");
       $("#currentTopic").html("Topic: <strong>" + currentTopic + "</strong>");
     }
-
     $(function() {
-      updateUI(); 
-
+      updateUI();
+      
       // Demo Steps
       var demoState = {
         currentStep: 0,
         steps: [
           {
             element: "#header",
-            text: "This area displays the current Task, Stage, and Topic.",
+            text: "This area displays the current Task and Topic.",
             event: "click"
           },
           {
@@ -125,25 +160,24 @@
             event: "click"
           },
           {
-            element: "#videoList .video-container:first-child img, #videoList .video-container:first-child video",
-            text: "Click a thumbnail to load and play the video.",
+            element: "#videoList .video-row:first-child .video-thumbnail img, #videoList .video-row:first-child .video-thumbnail video",
+            text: "Click the thumbnail to load and play the video.",
             event: "click"
           },
           {
-            element: "#videoList .video-container:first-child .select-button",
-            text: "Click Select if it's relevant to proceed.",
+            element: "#videoList .video-row:first-child .select-button",
+            text: "Click Select if this video is relevant to proceed.",
             event: "click"
           }
         ]
       };
-
+      
       function showWelcomeOverlay() {
         $("#welcomeOverlay").fadeIn();
       }
       function showFinalOverlay() {
         $("#finalOverlay").fadeIn();
       }
-
       function showTooltip(step) {
         $(".demo-tooltip").remove();
         var $target = $(step.element);
@@ -156,12 +190,10 @@
         var nextButton = $("<button id='tooltipNext'>Next</button>");
         tooltip.append(textDiv).append(nextButton);
         $("body").append(tooltip);
-
         if (step.element === "#header") {
-          // #currentTask가 inline-block으로 되어 있어, 실제 텍스트 너비만큼만 공간을 차지하게 됨.
           var $textElem = $("#currentTask");
           var textOffset = $textElem.offset();
-          var desiredLeft = textOffset.left + $textElem.outerWidth();  // 텍스트 바로 옆에 위치
+          var desiredLeft = textOffset.left + $textElem.outerWidth();
           var tooltipWidth = tooltip.outerWidth();
           var windowWidth = $(window).width();
           if (desiredLeft + tooltipWidth > windowWidth) {
@@ -184,7 +216,6 @@
             left: offset.left + $target.outerWidth() + 10
           });
         }
-
         nextButton.on("click", function(e) {
           e.stopPropagation();
           if (step.element === "#searchBox") {
@@ -194,8 +225,6 @@
           }
           nextDemoStep();
         });
-        
-        // event-based step
         if (step.event === "input") {
           $target.on("input.demo", function() {
             if (step.condition && step.condition()) {
@@ -209,7 +238,6 @@
           });
         }
       }
-
       function nextDemoStep() {
         demoState.currentStep++;
         $(".demo-tooltip").remove();
@@ -219,7 +247,6 @@
           showFinalOverlay();
         }
       }
-
       function populateVideoList() {
         var videos = [
           "2020-0127-132751-002348.mp4",
@@ -233,28 +260,37 @@
         videos.forEach(function(file) {
           var videoSrc = "static/drama-1k-vids/" + file;
           var thumb = "static/drama-1k-imgs/" + file.replace(".mp4", ".jpg");
-          var videoDiv = $("<div class='video-container'></div>");
+          // Create a row container for each video
+          var videoRow = $("<div class='video-row'></div>");
+          // Left: Select button container
+          var selectContainer = $("<div class='select-container'></div>");
+          var selectBtn = $("<button class='select-button'>Select</button>");
+          selectContainer.append(selectBtn);
+          // Middle: Thumbnail container
+          var thumbnailContainer = $("<div class='video-thumbnail'></div>");
           var img = $("<img>")
             .attr("src", thumb)
             .css({ cursor: "pointer" })
             .on("click", function() {
               var videoElem = $("<video></video>")
                 .attr({ src: videoSrc, controls: true })
-                .css({ width: "320px", height: "180px" });
+                .css({ width: "340px", height: "190px" });
+              thumbnailContainer.find(".play-overlay").remove();
               $(this).replaceWith(videoElem);
               videoElem.get(0).play();
             });
-          var selectBtn = $("<button class='select-button'>Select</button>");
-          videoDiv.append(img).append(selectBtn);
-          container.append(videoDiv);
+          var playOverlay = $("<div class='play-overlay'><img src='/static/icon/play-button.png' alt='Play'/></div>");
+          thumbnailContainer.append(img).append(playOverlay);
+          // Right: Description container with placeholder text
+          var desc = "This is where the video description will appear.";
+          var descContainer = $("<div class='video-description'></div>").text(desc);
+          videoRow.append(selectContainer).append(thumbnailContainer).append(descContainer);
+          container.append(videoRow);
         });
       }
-
-      // Overlay button events
       $("#welcomeStartDemoButton").on("click", function() {
         $("#welcomeOverlay").fadeOut(function() {
           demoState.currentStep = 0;
-          // 첫 번째 툴팁 표시
           showTooltip(demoState.steps[demoState.currentStep]);
         });
       });
@@ -267,8 +303,6 @@
       $("#startTestButton").on("click", function() {
         window.location.href = "emoji_autocomplete";
       });
-
-      // Simple autocomplete example
       $("#searchBox").autocomplete({
         source: function(request, response) {
           $.ajax({
@@ -282,8 +316,6 @@
         },
         minLength: 2
       });
-
-      // Display Welcome Overlay on page load
       showWelcomeOverlay();
     });
   </script>
@@ -293,10 +325,10 @@
   <div id="header">
     <div id="currentTask"></div>
     <div id="stage-topic">
-      <span id="currentStage"></span> | <span id="currentTopic"></span>
+      <span id="currentTopic"></span>
     </div>
   </div>
-
+  
   <!-- Welcome Overlay -->
   <div id="welcomeOverlay" class="overlay">
     <div>
@@ -304,7 +336,7 @@
       <button id="welcomeStartDemoButton">Start Demo</button>
     </div>
   </div>
-
+  
   <!-- Final Overlay -->
   <div id="finalOverlay" class="overlay">
     <div>
@@ -313,14 +345,14 @@
       <button id="startTestButton">Start Test</button>
     </div>
   </div>
-
+  
   <div id="searchContainer">
-    <div style="display:flex; justify-content:center; width:100%;">
+    <div style="display: flex; justify-content: center; width: 100%;">
       <input type="text" name="search" id="searchBox" placeholder="Enter search query..." />
       <button type="button" id="btnSearch">Search</button>
     </div>
   </div>
-
+  
   <div id="videoList"></div>
 </body>
 </html>

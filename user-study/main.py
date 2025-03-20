@@ -25,23 +25,30 @@ templates = Jinja2Templates(directory=templates_dir)
 static_dir = os.path.join(os.path.dirname(__file__), 'static')
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-# Use the correct CSV files for both datasets
+# CSV files for video data
 drama_csv_path = Path(__file__).parent.parent / 'outputs' / 'drama-vid-1k-wRisk-pllava13b-llama3_3-70b-phrases-emojis-split-importance.csv'
 msvd_csv_path = Path(__file__).parent.parent / 'outputs' / 'msvd-pllava13b-llama3_3-70b-phrases-emojis-split-importance.csv'
+
+# CSV files for video descriptions
+drama_desc_path = Path(__file__).parent.parent / 'outputs' / 'drama-vid-1k-wRisk-pllava13b-descriptions-no-atmo.csv'
+msvd_desc_path = Path(__file__).parent.parent / 'outputs' / 'msvd-pllava13b-descriptions-no-atmo.csv'
 
 drama_vid_base = 'drama-video-100-mp4'
 # For MSVD, videos are in "msvd-vids" and thumbnails in "msvd-imgs"
 
 # Global variables
 model = None
-# video_embeddings is a dictionary with keys "drama" and "msvd"
 video_embeddings = {"drama": {}, "msvd": {}}
+# Description dictionaries: maps video ID to description string
+drama_descs = {}
+msvd_descs = {}
 
-group_text_only = {"12345", "48361", "38746", "72849", "29850", "76829", "19381", "27457", "91837", "15738", "85831", "49384", "48749"}
-group_emoji_text = {"67890", "82946", "37492", "81645", "98187", "10983", "28378", "19273", "91981", "34276", "94727", "12782", "26561"}
+# Define three groups for the study.
+group_without = {"12345", "72849", "98187", "19381", "19273", "15738", "94727", "48749"}
+group_text_only = {"67890", "81645", "76829", "28378", "91837", "34276", "49384", "26561"}
+group_emoji_text = {"11111", "37492", "29850", "10983", "27457", "91981", "85831", "12782", "39483"}
 
 def load_dataset(csv_path):
-    # Read CSV using utf-8-sig and strip column names
     df = pd.read_csv(csv_path, encoding='utf-8-sig')
     df.columns = df.columns.str.strip()
     df_out = pd.DataFrame(columns=['vidID', 'phrase', 'split', 'emojis', 'importance'])
@@ -82,14 +89,30 @@ def load_embeddings(embeddings_folder):
             emb_dict[vid_id] = np.load(file)
     return emb_dict
 
+def load_descriptions(desc_csv_path):
+    desc_dict = {}
+    df = pd.read_csv(desc_csv_path, encoding='utf-8-sig')
+    df.columns = df.columns.str.strip()
+    for index, row in df.iterrows():
+        vidid = row["Video ID"]
+        answer = row["Answer"]
+        desc_dict[vidid] = answer
+    return desc_dict
+
 def init():
-    global model, video_embeddings
+    global model, video_embeddings, drama_descs, msvd_descs
     # Load drama dataset and create DuckDB table
     drama_df = load_dataset(drama_csv_path)
+    duckdb.register("drama_df", drama_df)
     duckdb.sql('CREATE TABLE drama AS SELECT * FROM drama_df')
     # Load msvd dataset and create DuckDB table
     msvd_df = load_dataset(msvd_csv_path)
+    duckdb.register("msvd_df", msvd_df)
     duckdb.sql('CREATE TABLE msvd AS SELECT * FROM msvd_df')
+    
+    # Load descriptions
+    drama_descs = load_descriptions(drama_desc_path)
+    msvd_descs = load_descriptions(msvd_desc_path)
     
     print("Loading model...")
     model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
@@ -106,18 +129,16 @@ async def login_form(request: Request):
 
 @app.post("/login")
 async def login(request: Request, user_id: str = Form(...)):
-    # Define groups: text_only and emoji_text
-    # group_text_only = {"12345", "54321"}
-    # group_emoji_text = {"67890", "09876", "11223"}
-    if user_id in group_text_only or user_id in group_emoji_text:
-        request.session["user_id"] = user_id
-        if user_id in group_text_only:
-            request.session["test_group"] = "text_only"
-        else:
-            request.session["test_group"] = "emoji_text"
-        return RedirectResponse(url="/demo", status_code=302)
+    if user_id in group_without:
+        request.session["test_group"] = "group_without"
+    elif user_id in group_text_only:
+        request.session["test_group"] = "group_text_only"
+    elif user_id in group_emoji_text:
+        request.session["test_group"] = "group_emoji_text"
     else:
         return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid ID."})
+    request.session["user_id"] = user_id
+    return RedirectResponse(url="/demo", status_code=302)
 
 @app.get("/demo")
 async def demo_page(request: Request):
@@ -133,7 +154,7 @@ async def test_page(request: Request):
 
 @app.get("/search_text")
 async def search_text(term: str, dataset: str = "drama"):
-    table = dataset  # either 'drama' or 'msvd'
+    table = dataset
     res = duckdb.sql("SELECT phrase FROM " + table + " WHERE phrase ILIKE '%" + term + "%'").df()
     results = [{'label': row['phrase']} for index, row in res.iterrows()]
     return results[:20]
@@ -174,7 +195,7 @@ async def search_emoji(term: str, dataset: str = "drama"):
 
 @app.post("/get_list")
 async def get_list(searchTxt: str = Form(...), dataset: str = Form("drama")):
-    global model, video_embeddings
+    global model, video_embeddings, drama_descs, msvd_descs
     query = searchTxt.strip()
     if not query:
         return []
@@ -184,17 +205,20 @@ async def get_list(searchTxt: str = Form(...), dataset: str = Form("drama")):
         sim = np.dot(query_emb, emb) / (np.linalg.norm(query_emb) * np.linalg.norm(emb) + 1e-8)
         scores.append((vid_id, sim))
     scores = sorted(scores, key=lambda x: x[1], reverse=True)
-    top30 = scores[:30]
+    top15 = scores[:15]
     results = []
-    for vid_id, score in top30:
+    for vid_id, score in top15:
         if dataset == "msvd":
-            # video_url = "static/msvd-vids/" + vid_id + ".avi"
             video_url = "static/msvd-vids/" + vid_id + ".mp4"
             thumbnail_url = "static/msvd-imgs/" + vid_id + ".jpg"
+            description = msvd_descs.get(vid_id, "No description available")
         else:
             video_url = "static/drama-1k-vids/" + vid_id + ".mp4"
             thumbnail_url = "static/drama-1k-imgs/" + vid_id + ".jpg"
-        results.append({"video_url": video_url, "thumbnail_url": thumbnail_url})
+            description = drama_descs.get(vid_id, "No description available")
+        if len(description) > 200:
+            description = description[:200] + "..."
+        results.append({"video_url": video_url, "thumbnail_url": thumbnail_url, "description": description})
     return results
 
 @app.get("/search")
