@@ -6,22 +6,24 @@
   <script src="https://code.jquery.com/jquery-3.6.0.min.js" crossorigin="anonymous"></script>
   <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js" crossorigin="anonymous"></script>
   <style>
-    /* Basic UI styles */
     body { font-family: Arial, sans-serif; margin: 20px; }
     h1 { text-align: center; }
+    /* Header displays current Task, Stage, and Topic */
     #header { text-align: center; margin-bottom: 20px; }
-    #currentTask { font-size: 20px; margin-bottom: 10px; }
-    #currentTopic { font-size: 18px; }
+    #currentTask { font-size: 20px; margin-bottom: 5px; }
+    #stage-topic { font-size: 16px; }
+    #currentStage { margin-right: 10px; }
+    /* Search container */
     #searchContainer { text-align: center; margin-bottom: 20px; }
     #searchBox { width: 500px; padding: 8px; font-size: 16px; }
     #btnSearch { padding: 8px 16px; font-size: 16px; }
     
-    /* Video list: container occupies ~60% of page width */
+    /* Video list: container occupies 60% of page width */
     #videoList {
       width: 60%;
       margin: 20px auto;
     }
-    /* Each video row: flex container for a YouTube-like layout */
+    /* Each video row uses a YouTube-like flex layout */
     .video-row {
       display: flex;
       flex-direction: row;
@@ -29,12 +31,12 @@
       border-bottom: 1px solid #ccc;
       padding: 10px 0;
     }
-    /* Select container: fixed width */
+    /* Left: Select container (80px wide) */
     .select-container {
       flex: 0 0 80px;
       text-align: center;
     }
-    /* Video thumbnail container: slightly larger than before */
+    /* Middle: Video thumbnail container (340x190) */
     .video-thumbnail {
       flex: 0 0 340px;
       height: 190px;
@@ -47,7 +49,6 @@
       height: 190px;
       object-fit: cover;
     }
-    /* Adjust play overlay to be centered on the larger thumbnail */
     .play-overlay {
       position: absolute;
       top: 50%;
@@ -60,10 +61,11 @@
       height: 50px;
       opacity: 0.8;
     }
-    /* Video description container */
+    /* Right: Video description container */
     .video-description {
       flex: 1;
       font-size: 16px;
+      color: #333;
       overflow: hidden;
       text-overflow: ellipsis;
       display: -webkit-box;
@@ -99,7 +101,7 @@
     }
   </style>
   <script>
-    // Utility function: Array shuffle (Fisher-Yates) – not used as topics are sequential.
+    // Utility: Shuffle an array.
     function shuffle(array) {
       for (let i = array.length - 1; i > 0; i--) {
          const j = Math.floor(Math.random() * (i + 1));
@@ -108,12 +110,41 @@
       return array;
     }
     
-    // Retrieve test_group from server (template variable)
-    var testGroup = "{{ test_group }}"; // "group_without", "group_text_only", or "group_emoji_text"
-    // Global variable for current dataset; initially "drama"
-    var currentDataset = "drama";
+    // Stage sequence based on test group provided by the backend.
+    // For Group 1 (test_group = "group_1"):
+    //   0: { stage: "without autocompletion", dataset: "drama" }
+    //   1: { stage: "without autocompletion", dataset: "msvd" }
+    //   2: { stage: "text-only autocompletion", dataset: "drama" }
+    //   3: { stage: "text-only autocompletion", dataset: "msvd" }
+    // For Group 2 (test_group = "group_2"):
+    //   0: { stage: "text-only autocompletion", dataset: "drama" }
+    //   1: { stage: "text-only autocompletion", dataset: "msvd" }
+    //   2: { stage: "emoji-text autocompletion", dataset: "drama" }
+    //   3: { stage: "emoji-text autocompletion", dataset: "msvd" }
+    var testGroup = "{{ test_group }}"; // "group_1" or "group_2"
+    var stageSequence = [];
+    if (testGroup === "group_1") {
+      stageSequence = [
+        { stage: "without autocompletion", dataset: "drama" },
+        { stage: "without autocompletion", dataset: "msvd" },
+        { stage: "text-only autocompletion", dataset: "drama" },
+        { stage: "text-only autocompletion", dataset: "msvd" }
+      ];
+    } else if (testGroup === "group_2") {
+      stageSequence = [
+        { stage: "text-only autocompletion", dataset: "drama" },
+        { stage: "text-only autocompletion", dataset: "msvd" },
+        { stage: "emoji-text autocompletion", dataset: "drama" },
+        { stage: "emoji-text autocompletion", dataset: "msvd" }
+      ];
+    }
     
-    // Function to return the Task label (in bold) based on current dataset
+    var currentStageIndex = 0;
+    var currentTopicIndex = 0;
+    var currentStage = stageSequence[currentStageIndex].stage;
+    var currentDataset = stageSequence[currentStageIndex].dataset;
+    
+    // Function to return the Task label based on current dataset.
     function getTaskLabel() {
       if (currentDataset === "drama") {
         return "<strong>Driving Scene Video Search</strong>";
@@ -124,7 +155,7 @@
       }
     }
     
-    // Function to return topics for a given dataset in sequential order.
+    // Function to return topics for a given dataset (in sequential order).
     function getTopicsForDataset(dataset) {
       if (dataset === "drama") {
         return [
@@ -156,90 +187,29 @@
       return [];
     }
     
-    // Define stage order based on test group:
-    // For "group_without": use only "without autocompletion"
-    // For "group_text_only": use only "text-only autocompletion"
-    // For "group_emoji_text": use only "emoji-text autocompletion"
-    var stages;
-    if (testGroup === "group_without") {
-      stages = ["without autocompletion"];
-    } else if (testGroup === "group_text_only") {
-      stages = ["text-only autocompletion"];
-    } else if (testGroup === "group_emoji_text") {
-      stages = ["emoji-text autocompletion"];
-    } else {
-      stages = ["without autocompletion"];
-    }
-    
-    // Use topics in sequential order
+    // For the current stage, generate topics randomly.
     var topics = getTopicsForDataset(currentDataset);
-    var topicsOrder = {};
-    stages.forEach(function(stage) {
-      topicsOrder[stage] = topics.slice();
-    });
+    topics = shuffle(topics);
+    var topicsOrder = topics; // Use the randomized list.
     
-    // Each user goes through 1 stage for "drama" then 1 for "msvd"
-    var currentStageIndex = 0;
-    var currentTopicIndex = 0;
-    
-    // Logging function: sends event data to /log_event endpoint
-    function logEvent(eventType, details) {
-      var payload = {
-        timestamp: new Date().toISOString(),
-        event_type: eventType,
-        topic: $("#currentTopic").text().replace("Topic: ", "").trim(),
-        details: details
-      };
-      $.ajax({
-        type: "POST",
-        url: "/log_event",
-        contentType: "application/json",
-        data: JSON.stringify(payload),
-        success: function(response) {
-          console.log("Logged event: " + eventType);
-        },
-        error: function(err) {
-          console.log("Log event error:", err);
-        }
-      });
-    }
-    
-    // Function to show overlay with a message and a "Continue" button.
-    // Parameter showTask (boolean) determines whether to include the Task line.
-    function showOverlay(message, callback, showTask) {
-      showTask = showTask || false;
-      var fullMessage = "";
-      // if (showTask) {
-      //   fullMessage += "Task: " + getTaskLabel() + "<br>";
-      // }
-      fullMessage += message;
-      $("#overlay").html("<div class='overlay-content'><p>" + fullMessage + "</p><button id='overlayContinue'>Continue</button></div>");
-      $("#overlay").fadeIn();
-      $("#overlayContinue").on("click", function(){
-        $("#overlay").fadeOut(function(){
-          logEvent("topic_start", {});
-          if (callback) callback();
-        });
-      });
-    }
-    
-    // UI update: display current topic (with numbering) and current Task in bold
+    // updateUI() updates the header above the search box.
     function updateUI() {
-      var totalTopics = topicsOrder[stages[currentStageIndex]].length;
-      var currentTopic = topicsOrder[stages[currentStageIndex]][currentTopicIndex];
-      $("#currentTopic").html("Topic (" + (currentTopicIndex+1) + " of " + totalTopics + "): <strong>" + currentTopic + "</strong>");
-      $("#currentTask").html(getTaskLabel());
+      $("#currentTask").html("Task: " + getTaskLabel());
+      $("#currentStage").html("Stage: <strong>" + stageSequence[currentStageIndex].stage + "</strong>");
+      var totalTopics = topicsOrder.length;
+      var currentTopic = topicsOrder[currentTopicIndex];
+      $("#currentTopic").html("Topic (" + (currentTopicIndex + 1) + " of " + totalTopics + "): <strong>" + currentTopic + "</strong>");
       $("#searchBox").val("");
       $("#videoList").empty();
-      logEvent("topic_start", { topic: currentTopic });
+      logEvent("topic_start", { stage: stageSequence[currentStageIndex].stage, topic: currentTopic });
       
-      // Set up autocomplete based on current stage and dataset
-      var currentStage = stages[currentStageIndex];
-      if (currentStage === "without autocompletion") {
+      // Set up autocomplete based on current stage.
+      var currentStageLocal = stageSequence[currentStageIndex].stage;
+      if (currentStageLocal === "without autocompletion") {
         if ($("#searchBox").data("ui-autocomplete")) {
           $("#searchBox").autocomplete("destroy");
         }
-      } else if (currentStage === "text-only autocompletion") {
+      } else if (currentStageLocal === "text-only autocompletion") {
         $("#searchBox").autocomplete({
           source: function(request, response) {
             $.ajax({
@@ -267,7 +237,7 @@
               .append($("<div class='ui-menu-item-wrapper'>").html(label))
               .appendTo(ul);
         };
-      } else if (currentStage === "emoji-text autocompletion") {
+      } else if (currentStageLocal === "emoji-text autocompletion") {
         $("#searchBox").autocomplete({
           source: function(request, response) {
             $.ajax({
@@ -299,52 +269,119 @@
       }
     }
     
-    // Function to proceed to the next topic
-    function nextTopic() {
-      console.log("Next topic called. Current Topic Index:", currentTopicIndex);
-      currentTopicIndex++;
-      if (currentTopicIndex >= topicsOrder[stages[currentStageIndex]].length) {
-          // Finished current task; if currentDataset is "drama", switch to "msvd"
-          if (currentDataset === "drama") {
-            currentDataset = "msvd";
-            topics = getTopicsForDataset("msvd");
-            if (testGroup === "group_without") {
-              stages = ["without autocompletion"];
-            } else if (testGroup === "group_text_only") {
-              stages = ["text-only autocompletion"];
-            } else if (testGroup === "group_emoji_text") {
-              stages = ["emoji-text autocompletion"];
-            } else {
-              stages = ["without autocompletion"];
-            }
-            topicsOrder = {};
-            stages.forEach(function(stage) {
-              topicsOrder[stage] = getTopicsForDataset("msvd").slice();
-            });
-            currentStageIndex = 0;
-            currentTopicIndex = 0;
-            var totalTopics = topicsOrder[stages[0]].length;
-            var newTopic = topicsOrder[stages[0]][0];
-            showOverlay("Task complete. Moving to the next task.<br>Task: " + getTaskLabel() + "<br>Topic (1 of " + totalTopics + "): <strong>" + newTopic + "</strong>", function(){
-                updateUI();
-            }, true);
-            logEvent("dataset_change", { new_dataset: "msvd" });
+    // Logging function: sends event data to /log_event.
+    function logEvent(eventType, details) {
+      var payload = {
+        timestamp: new Date().toISOString(),
+        event_type: eventType,
+        stage: $("#currentStage").text().replace("Stage: ", "").trim(),
+        topic: $("#currentTopic").text().replace("Topic: ", "").trim(),
+        details: details
+      };
+      $.ajax({
+        type: "POST",
+        url: "/log_event",
+        contentType: "application/json",
+        data: JSON.stringify(payload),
+        success: function(response) {
+          console.log("Logged event: " + eventType);
+        },
+        error: function(err) {
+          console.log("Log event error:", err);
+        }
+      });
+    }
+    
+    // Show overlay that displays current Task, Stage, and Topic.
+    // If showTask is true, a countdown (5 sec) is used before the "Continue" button appears.
+    function showOverlay(message, callback, showTask) {
+      showTask = showTask || false;
+      var fullMessage = "";
+      if (showTask) {
+        fullMessage += "<strong>START NEW SEARCH TASK!!</strong><br><br>" +
+                       "Task: " + getTaskLabel() + "<br>" +
+                       "Stage: <strong>" + stageSequence[currentStageIndex].stage + "</strong><br><br>";
+      }
+      fullMessage += message;
+      var overlayContent = $("<div class='overlay-content'><p>" + fullMessage + "</p></div>");
+      $("#overlay").html(overlayContent);
+      $("#overlay").fadeIn();
+      
+      if (showTask) {
+        var countdown = 10;
+        var countdownElem = $("<p id='countdown'>Button will appear in 10 secs</p>");
+        overlayContent.append(countdownElem);
+        var countdownInterval = setInterval(function(){
+          countdown--;
+          if (countdown > 0) {
+            $("#countdown").text("Button will appear in " + countdown + " sec" + (countdown > 1 ? "s" : ""));
           } else {
-            showOverlay("User study complete. Thank you!", function(){}, true);
-            logEvent("study_complete", {});
-            return;
+            clearInterval(countdownInterval);
+            $("#countdown").remove();
+            var continueButton = $("<button id='overlayContinue'>Continue</button>");
+            overlayContent.append(continueButton);
+            continueButton.on("click", function(){
+              $("#overlay").fadeOut(function(){
+                logEvent("topic_start", {});
+                if (callback) callback();
+              });
+            });
           }
+        }, 1000);
       } else {
-          var nextTopicName = topicsOrder[stages[currentStageIndex]][currentTopicIndex];
-          var totalTopics = topicsOrder[stages[currentStageIndex]].length;
-          showOverlay("Topic complete. Moving to the next topic.<br>Topic (" + (currentTopicIndex+1) + " of " + totalTopics + "): <strong>" + nextTopicName + "</strong>", function(){
-              updateUI();
-          }, false);
-          logEvent("topic_change", { new_topic: nextTopicName });
+        var continueButton = $("<button id='overlayContinue'>Continue</button>");
+        overlayContent.append(continueButton);
+        continueButton.on("click", function(){
+          $("#overlay").fadeOut(function(){
+            logEvent("topic_start", {});
+            if (callback) callback();
+          });
+        });
       }
     }
     
-    // Function to generate video list from actual search results with YouTube-like layout.
+    // Proceed to the next topic; if this is the final topic of the final stage, show study complete overlay.
+    function nextTopic() {
+      // Check if we are on the last topic of the final stage:
+      if (currentStageIndex === stageSequence.length - 1 && currentTopicIndex === topicsOrder.length - 1) {
+        showOverlay("User study complete. Thank you!", function(){}, false);
+        logEvent("study_complete", {});
+      } else {
+        currentTopicIndex++;
+        if (currentTopicIndex >= topicsOrder.length) {
+          // End of topics in current stage: move to next stage.
+          currentStageIndex++;
+          if (currentStageIndex >= stageSequence.length) {
+            showOverlay("User study complete. Thank you!", function(){}, false);
+            logEvent("study_complete", {});
+            return;
+          } else {
+            var nextStage = stageSequence[currentStageIndex];
+            currentDataset = nextStage.dataset;
+            currentStage = nextStage.stage;
+            topics = getTopicsForDataset(currentDataset);
+            topics = shuffle(topics);
+            topicsOrder = topics; // update topicsOrder for new stage
+            currentTopicIndex = 0;
+            var totalTopics = topicsOrder.length;
+            var newTopic = topicsOrder[0];
+            showOverlay("Topic (1 of " + totalTopics + "): <strong>" + newTopic + "</strong>", function(){
+              updateUI();
+            }, true);
+            logEvent("stage_change", { new_stage: currentStage });
+          }
+        } else {
+          var nextTopicName = topicsOrder[currentTopicIndex];
+          var totalTopics = topicsOrder.length;
+          showOverlay("Topic complete. Moving to the next topic.<br><br>Topic (" + (currentTopicIndex + 1) + " of " + totalTopics + "): <strong>" + nextTopicName + "</strong>", function(){
+            updateUI();
+          }, false);
+          logEvent("topic_change", { new_topic: nextTopicName });
+        }
+      }
+    }
+    
+    // Generate video list from search results with a YouTube-like layout.
     function populateVideoList() {
       var searchText = $("#searchBox").val();
       logEvent("search_button_clicked", { query: searchText, dataset: currentDataset });
@@ -359,9 +396,7 @@
             var videoUrl = item.video_url;
             var thumbnailUrl = item.thumbnail_url;
             var description = item.description;
-            // Create a row container
             var videoRow = $("<div class='video-row'></div>");
-            // Left: select container (80px wide)
             var selectContainer = $("<div class='select-container'></div>");
             var selectBtn = $("<button class='select-button'>Select</button>")
               .on("click", function(){
@@ -369,7 +404,6 @@
                 nextTopic();
               });
             selectContainer.append(selectBtn);
-            // Middle: thumbnail container (slightly increased to 340x190)
             var thumbnailContainer = $("<div class='video-thumbnail'></div>");
             var thumbnail = $("<img>").attr("src", thumbnailUrl).css({"cursor": "pointer"});
             var playOverlay = $("<div class='play-overlay'><img src='/static/icon/play-button.png' alt='Play'/></div>");
@@ -384,7 +418,6 @@
               logEvent("video_played", { video_url: videoUrl, index: index, dataset: currentDataset });
             });
             thumbnailContainer.append(thumbnail).append(playOverlay);
-            // Right: description container with CSS truncation
             var descContainer = $("<div class='video-description'></div>").text(description);
             videoRow.append(selectContainer).append(thumbnailContainer).append(descContainer);
             container.append(videoRow);
@@ -397,27 +430,42 @@
     }
     
     $(document).ready(function(){
-      // On page load, show overlay with Task and current topic (with topic number)
-      var totalTopics = topicsOrder[stages[currentStageIndex]].length;
-      var currentTopic = topicsOrder[stages[currentStageIndex]][currentTopicIndex];
+      updateUI();
+      // On page load, show overlay with current Task, Stage, and Topic.
+      var totalTopics = topicsOrder.length;
+      var currentTopic = topicsOrder[currentTopicIndex];
       showOverlay("Topic (1 of " + totalTopics + "): <strong>" + currentTopic + "</strong>", function(){
-          updateUI();
+        updateUI();
       }, true);
       
-      // Log each keystroke in the search box and enable search button only when at least 3 words are entered
       $("#searchBox").on("input", function(){
-          logEvent("input_text", { text: $(this).val(), dataset: currentDataset });
-          var words = $(this).val().trim().split(/\s+/);
-          if (words.length < 3) {
-              $("#btnSearch").prop("disabled", true);
-          } else {
-              $("#btnSearch").prop("disabled", false);
-          }
+        logEvent("input_text", { text: $(this).val(), dataset: currentDataset });
+        var words = $(this).val().trim().split(/\s+/).filter(function(word) {
+          return word.length > 0;
+        });
+        if(words.length < 3){
+          $("#btnSearch").prop("disabled", true);
+        } else {
+          $("#btnSearch").prop("disabled", false);
+        }
       });
       
-      // On search button click, generate video list from actual search results
       $("#btnSearch").on("click", function(){
-          populateVideoList();
+        populateVideoList();
+      });
+      
+      $("#searchBox").autocomplete({
+        source: function(request, response) {
+          $.ajax({
+            url: "/search",
+            dataType: "json",
+            cache: false,
+            data: { term: request.term },
+            success: function(data){ response(data); },
+            error: function(){}
+          });
+        },
+        minLength: 2
       });
     });
   </script>
@@ -427,7 +475,7 @@
   <div id="header">
     <div id="currentTask"></div>
     <div id="stage-topic">
-      <span id="currentTopic"></span>
+      <span id="currentStage"></span> | <span id="currentTopic"></span>
     </div>
   </div>
   <div id="searchContainer">

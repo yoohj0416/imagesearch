@@ -39,14 +39,12 @@ drama_vid_base = 'drama-video-100-mp4'
 # Global variables
 model = None
 video_embeddings = {"drama": {}, "msvd": {}}
-# Description dictionaries: maps video ID to description string
 drama_descs = {}
 msvd_descs = {}
 
-# Define three groups for the study.
-group_without = {"12345", "72849", "98187", "19381", "19273", "15738", "94727", "48749"}
-group_text_only = {"67890", "81645", "76829", "28378", "91837", "34276", "49384", "26561"}
-group_emoji_text = {"11111", "37492", "29850", "10983", "27457", "91981", "85831", "12782", "39483"}
+# Define two groups for the study.
+group_1 = {"12345", "72849", "98187", "19381", "19273", "15738", "94727", "48749"}
+group_2 = {"67890", "81645", "76829", "28378", "91837", "34276", "49384", "26561"}
 
 def load_dataset(csv_path):
     df = pd.read_csv(csv_path, encoding='utf-8-sig')
@@ -129,12 +127,10 @@ async def login_form(request: Request):
 
 @app.post("/login")
 async def login(request: Request, user_id: str = Form(...)):
-    if user_id in group_without:
-        request.session["test_group"] = "group_without"
-    elif user_id in group_text_only:
-        request.session["test_group"] = "group_text_only"
-    elif user_id in group_emoji_text:
-        request.session["test_group"] = "group_emoji_text"
+    if user_id in group_1:
+        request.session["test_group"] = "group_1"
+    elif user_id in group_2:
+        request.session["test_group"] = "group_2"
     else:
         return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid ID."})
     request.session["user_id"] = user_id
@@ -246,4 +242,4 @@ async def log_event(request: Request):
 
 if __name__ == "__main__":
     init()
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
