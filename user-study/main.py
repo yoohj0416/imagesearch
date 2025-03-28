@@ -43,8 +43,8 @@ drama_descs = {}
 msvd_descs = {}
 
 # Define two groups for the study.
-group_1 = {"12345", "72849", "98187", "19381", "19273", "15738", "94727", "48749"}
-group_2 = {"67890", "81645", "76829", "28378", "91837", "34276", "49384", "26561"}
+group_1 = {"12344", "12345", "72848", "29851", "76828", "28377", "91836", "15737", "85832", "49383", "48748"}
+group_2 = {"67890", "67899", "81644", "98187", "10982", "19273", "91980", "34275", "94728", "12781", "26562"}
 
 def load_dataset(csv_path):
     df = pd.read_csv(csv_path, encoding='utf-8-sig')
@@ -129,8 +129,17 @@ async def login_form(request: Request):
 async def login(request: Request, user_id: str = Form(...)):
     if user_id in group_1:
         request.session["test_group"] = "group_1"
+        # Assign sub-group based on user ID (even/odd)
+        if int(user_id) % 2 == 0:
+            request.session["sub_group"] = "first"
+        else:
+            request.session["sub_group"] = "second"
     elif user_id in group_2:
         request.session["test_group"] = "group_2"
+        if int(user_id) % 2 == 0:
+            request.session["sub_group"] = "first"
+        else:
+            request.session["sub_group"] = "second"
     else:
         return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid ID."})
     request.session["user_id"] = user_id
@@ -140,13 +149,21 @@ async def login(request: Request, user_id: str = Form(...)):
 async def demo_page(request: Request):
     if not request.session.get("user_id"):
         return RedirectResponse(url="/", status_code=302)
-    return templates.TemplateResponse("demo.html", {"request": request, "test_group": request.session.get("test_group")})
+    return templates.TemplateResponse("demo.html", {
+        "request": request,
+        "test_group": request.session.get("test_group"),
+        "sub_group": request.session.get("sub_group")
+    })
 
 @app.get("/emoji_autocomplete")
 async def test_page(request: Request):
     if not request.session.get("user_id"):
         return RedirectResponse(url="/", status_code=302)
-    return templates.TemplateResponse("emoji_autocomplete.html", {"request": request, "test_group": request.session.get("test_group")})
+    return templates.TemplateResponse("emoji_autocomplete.html", {
+        "request": request,
+        "test_group": request.session.get("test_group"),
+        "sub_group": request.session.get("sub_group")
+    })
 
 @app.get("/search_text")
 async def search_text(term: str, dataset: str = "drama"):
@@ -242,4 +259,4 @@ async def log_event(request: Request):
 
 if __name__ == "__main__":
     init()
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

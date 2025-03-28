@@ -17,7 +17,6 @@
     #searchContainer { text-align: center; margin-bottom: 20px; }
     #searchBox { width: 500px; padding: 8px; font-size: 16px; }
     #btnSearch { padding: 8px 16px; font-size: 16px; }
-    
     /* Video list: container occupies 60% of page width */
     #videoList {
       width: 60%;
@@ -77,7 +76,6 @@
       font-size: 14px;
       cursor: pointer;
     }
-    
     /* Overlay styles */
     #overlay {
       position: fixed;
@@ -101,7 +99,7 @@
     }
   </style>
   <script>
-    // Utility: Shuffle an array.
+    // Utility: Shuffle an array (필요한 경우에만 사용)
     function shuffle(array) {
       for (let i = array.length - 1; i > 0; i--) {
          const j = Math.floor(Math.random() * (i + 1));
@@ -110,33 +108,50 @@
       return array;
     }
     
-    // Stage sequence based on test group provided by the backend.
-    // For Group 1 (test_group = "group_1"):
-    //   0: { stage: "without autocompletion", dataset: "drama" }
-    //   1: { stage: "without autocompletion", dataset: "msvd" }
-    //   2: { stage: "text-only autocompletion", dataset: "drama" }
-    //   3: { stage: "text-only autocompletion", dataset: "msvd" }
-    // For Group 2 (test_group = "group_2"):
-    //   0: { stage: "text-only autocompletion", dataset: "drama" }
-    //   1: { stage: "text-only autocompletion", dataset: "msvd" }
-    //   2: { stage: "emoji-text autocompletion", dataset: "drama" }
-    //   3: { stage: "emoji-text autocompletion", dataset: "msvd" }
-    var testGroup = "{{ test_group }}"; // "group_1" or "group_2"
+    // Retrieve test group and subgroup from backend template variables.
+    var testGroup = "{{ test_group }}"; // "group_1" 또는 "group_2"
+    var subGroup = "{{ sub_group }}";   // "first" 또는 "second"
     var stageSequence = [];
+    
+    // For Group 1:
+    // - "first" subgroup: without autocompletion first, then text-only.
+    // - "second" subgroup: text-only autocompletion first, then without.
     if (testGroup === "group_1") {
-      stageSequence = [
-        { stage: "without autocompletion", dataset: "drama" },
-        { stage: "without autocompletion", dataset: "msvd" },
-        { stage: "text-only autocompletion", dataset: "drama" },
-        { stage: "text-only autocompletion", dataset: "msvd" }
-      ];
-    } else if (testGroup === "group_2") {
-      stageSequence = [
-        { stage: "text-only autocompletion", dataset: "drama" },
-        { stage: "text-only autocompletion", dataset: "msvd" },
-        { stage: "emoji-text autocompletion", dataset: "drama" },
-        { stage: "emoji-text autocompletion", dataset: "msvd" }
-      ];
+      if (subGroup === "first") {
+        stageSequence = [
+          { stage: "without autocompletion", dataset: "drama" },
+          { stage: "without autocompletion", dataset: "msvd" },
+          { stage: "text-only autocompletion", dataset: "drama" },
+          { stage: "text-only autocompletion", dataset: "msvd" }
+        ];
+      } else {
+        stageSequence = [
+          { stage: "text-only autocompletion", dataset: "drama" },
+          { stage: "text-only autocompletion", dataset: "msvd" },
+          { stage: "without autocompletion", dataset: "drama" },
+          { stage: "without autocompletion", dataset: "msvd" }
+        ];
+      }
+    }
+    // For Group 2:
+    // - "first" subgroup: text-only autocompletion first, then emoji-text.
+    // - "second" subgroup: emoji-text autocompletion first, then text-only.
+    else if (testGroup === "group_2") {
+      if (subGroup === "first") {
+        stageSequence = [
+          { stage: "text-only autocompletion", dataset: "drama" },
+          { stage: "text-only autocompletion", dataset: "msvd" },
+          { stage: "emoji-text autocompletion", dataset: "drama" },
+          { stage: "emoji-text autocompletion", dataset: "msvd" }
+        ];
+      } else {
+        stageSequence = [
+          { stage: "emoji-text autocompletion", dataset: "drama" },
+          { stage: "emoji-text autocompletion", dataset: "msvd" },
+          { stage: "text-only autocompletion", dataset: "drama" },
+          { stage: "text-only autocompletion", dataset: "msvd" }
+        ];
+      }
     }
     
     var currentStageIndex = 0;
@@ -155,7 +170,7 @@
       }
     }
     
-    // Function to return topics for a given dataset (in sequential order).
+    // Function to return topics for a given dataset (순서대로 반환).
     function getTopicsForDataset(dataset) {
       if (dataset === "drama") {
         return [
@@ -187,12 +202,11 @@
       return [];
     }
     
-    // For the current stage, generate topics randomly.
+    // topics를 shuffle하지 않고 그대로 사용.
     var topics = getTopicsForDataset(currentDataset);
-    topics = shuffle(topics);
-    var topicsOrder = topics; // Use the randomized list.
+    var topicsOrder = topics;
     
-    // updateUI() updates the header above the search box.
+    // updateUI() 업데이트: 기존 topic_start 로그는 제거.
     function updateUI() {
       $("#currentTask").html("Task: " + getTaskLabel());
       $("#currentStage").html("Stage: <strong>" + stageSequence[currentStageIndex].stage + "</strong>");
@@ -201,7 +215,6 @@
       $("#currentTopic").html("Topic (" + (currentTopicIndex + 1) + " of " + totalTopics + "): <strong>" + currentTopic + "</strong>");
       $("#searchBox").val("");
       $("#videoList").empty();
-      logEvent("topic_start", { stage: stageSequence[currentStageIndex].stage, topic: currentTopic });
       
       // Set up autocomplete based on current stage.
       var currentStageLocal = stageSequence[currentStageIndex].stage;
@@ -216,7 +229,18 @@
               type: "GET",
               url: "/search_text",
               data: { term: request.term, dataset: currentDataset },
-              success: function(data) { response(data); },
+              success: function(data) {
+                // 중복된 label 제거
+                var uniqueData = [];
+                var seen = {};
+                data.forEach(function(item) {
+                  if (!seen[item.label]) {
+                    seen[item.label] = true;
+                    uniqueData.push(item);
+                  }
+                });
+                response(uniqueData);
+              },
               error: function(jqXHR, textStatus, errorThrown) {
                 console.log(textStatus + " " + errorThrown);
               }
@@ -244,7 +268,18 @@
               type: "GET",
               url: "/search_emoji",
               data: { term: request.term, dataset: currentDataset },
-              success: function(data) { response(data); },
+              success: function(data) {
+                // 중복된 label 제거
+                var uniqueData = [];
+                var seen = {};
+                data.forEach(function(item) {
+                  if (!seen[item.label]) {
+                    seen[item.label] = true;
+                    uniqueData.push(item);
+                  }
+                });
+                response(uniqueData);
+              },
               error: function(jqXHR, textStatus, errorThrown) {
                 console.log(textStatus + " " + errorThrown);
               }
@@ -269,7 +304,7 @@
       }
     }
     
-    // Logging function: sends event data to /log_event.
+    // Logging function.
     function logEvent(eventType, details) {
       var payload = {
         timestamp: new Date().toISOString(),
@@ -292,8 +327,7 @@
       });
     }
     
-    // Show overlay that displays current Task, Stage, and Topic.
-    // If showTask is true, a countdown (5 sec) is used before the "Continue" button appears.
+    // Show overlay: Continue 버튼 클릭 시 topic_start 로그 기록.
     function showOverlay(message, callback, showTask) {
       showTask = showTask || false;
       var fullMessage = "";
@@ -322,7 +356,7 @@
             overlayContent.append(continueButton);
             continueButton.on("click", function(){
               $("#overlay").fadeOut(function(){
-                logEvent("topic_start", {});
+                logEvent("topic_start", { stage: stageSequence[currentStageIndex].stage, topic: topicsOrder[currentTopicIndex] });
                 if (callback) callback();
               });
             });
@@ -333,23 +367,21 @@
         overlayContent.append(continueButton);
         continueButton.on("click", function(){
           $("#overlay").fadeOut(function(){
-            logEvent("topic_start", {});
+            logEvent("topic_start", { stage: stageSequence[currentStageIndex].stage, topic: topicsOrder[currentTopicIndex] });
             if (callback) callback();
           });
         });
       }
     }
     
-    // Proceed to the next topic; if this is the final topic of the final stage, show study complete overlay.
+    // Proceed to the next topic.
     function nextTopic() {
-      // Check if we are on the last topic of the final stage:
       if (currentStageIndex === stageSequence.length - 1 && currentTopicIndex === topicsOrder.length - 1) {
         showOverlay("User study complete. Thank you!", function(){}, false);
         logEvent("study_complete", {});
       } else {
         currentTopicIndex++;
         if (currentTopicIndex >= topicsOrder.length) {
-          // End of topics in current stage: move to next stage.
           currentStageIndex++;
           if (currentStageIndex >= stageSequence.length) {
             showOverlay("User study complete. Thank you!", function(){}, false);
@@ -360,8 +392,7 @@
             currentDataset = nextStage.dataset;
             currentStage = nextStage.stage;
             topics = getTopicsForDataset(currentDataset);
-            topics = shuffle(topics);
-            topicsOrder = topics; // update topicsOrder for new stage
+            topicsOrder = topics;
             currentTopicIndex = 0;
             var totalTopics = topicsOrder.length;
             var newTopic = topicsOrder[0];
@@ -381,7 +412,7 @@
       }
     }
     
-    // Generate video list from search results with a YouTube-like layout.
+    // Generate video list.
     function populateVideoList() {
       var searchText = $("#searchBox").val();
       logEvent("search_button_clicked", { query: searchText, dataset: currentDataset });
@@ -431,7 +462,6 @@
     
     $(document).ready(function(){
       updateUI();
-      // On page load, show overlay with current Task, Stage, and Topic.
       var totalTopics = topicsOrder.length;
       var currentTopic = topicsOrder[currentTopicIndex];
       showOverlay("Topic (1 of " + totalTopics + "): <strong>" + currentTopic + "</strong>", function(){
@@ -480,7 +510,10 @@
   </div>
   <div id="searchContainer">
     <div style="display: flex; justify-content: center; width: 100%;">
-      <input type="text" name="search" id="searchBox" placeholder="Enter search query..." />
+      <form autocomplete="off">
+        <input type="text" name="dummy" style="display:none">
+        <input type="text" name="search" id="searchBox" placeholder="Enter search query..." autocomplete="off" />
+      </form>      
       <button type="button" id="btnSearch" disabled>Search</button>
     </div>
   </div>
