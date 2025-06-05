@@ -7,35 +7,139 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" crossorigin="anonymous"></script>
     <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js" crossorigin="anonymous"></script>
     <style>
-        #searchBox {
-            width: 560px;
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { text-align: center; }
+        /* Header displays current Task, Stage, and Topic */
+        #header { text-align: center; margin-bottom: 20px; }
+        #currentTask { font-size: 20px; margin-bottom: 5px; }
+        #stage-topic { font-size: 16px; }
+        #currentStage { margin-right: 10px; }
+        /* Search container */
+        #searchContainer { text-align: center; margin-bottom: 20px; }
+        #searchBox { width: 500px; padding: 8px; font-size: 16px; }
+        #btnSearch { padding: 8px 16px; font-size: 16px; }
+        /* Video list: container occupies 60% of page width */
+        #videoList {
+        width: 60%;
+        margin: 20px auto;
         }
-        #searchContainer {
-            width: 600px;
-            margin: auto;
+        /* Each video row uses a YouTube-like flex layout */
+        .video-row {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        border-bottom: 1px solid #ccc;
+        padding: 10px 0;
         }
-        #searchResults {
-            width: 800px;
-            margin: auto;
+        /* Left: Select container (80px wide) */
+        .select-container {
+        flex: 0 0 80px;
+        text-align: center;
         }
-        #videoList video {
-            width: 320px;
-            height: 240px;
-            margin: 5px;
+        /* Middle: Video thumbnail container (340x190) */
+        .video-thumbnail {
+        flex: 0 0 340px;
+        height: 190px;
+        position: relative;
+        margin-right: 20px;
         }
-        .ui-menu-item .ui-menu-item-wrapper {
-            display: flex;
-            align-items: center;
-            white-space: pre-wrap;
+        .video-thumbnail img,
+        .video-thumbnail video {
+        width: 340px;
+        height: 190px;
+        object-fit: cover;
         }
-        .ui-menu-item .icon {
-            margin-right: 10px;
+        .play-overlay {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
         }
-        .right-align {
-            text-align: right;
+        .play-overlay img {
+        width: 50px;
+        height: 50px;
+        opacity: 0.8;
+        }
+        /* Right: Video description container */
+        .video-description {
+        flex: 1;
+        font-size: 16px;
+        color: #333;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        }
+        .select-button {
+        padding: 5px 10px;
+        font-size: 14px;
+        cursor: pointer;
+        }
+        /* Overlay styles */
+        #overlay {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.7);
+        color: #fff;
+        font-size: 22px;
+        text-align: center;
+        padding-top: 25%;
+        display: none;
+        z-index: 1000;
+        }
+        #overlay .overlay-content { margin: 0 auto; max-width: 600px; }
+        #overlay button {
+        margin-top: 20px;
+        padding: 10px 20px;
+        font-size: 18px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
         }
     </style>
     <script>
+        // Generate video list.
+        function populateVideoList() {
+            var searchText = $("#searchBox").val();
+            $.ajax({
+                type: "POST",
+                url: "/get_list",
+                data: { searchTxt: searchText },
+                success: function(response) {
+                var container = $("#videoList");
+                container.empty();
+                response.forEach(function(item, index) {
+                    var videoUrl = item.video_url;
+                    var thumbnailUrl = item.thumbnail_url;
+                    var description = item.description;
+                    var videoRow = $("<div class='video-row'></div>");
+                    var selectContainer = $("<div class='select-container'></div>");
+                    var thumbnailContainer = $("<div class='video-thumbnail'></div>");
+                    var thumbnail = $("<img>").attr("src", thumbnailUrl).css({"cursor": "pointer"});
+                    var playOverlay = $("<div class='play-overlay'><img src='/static/icon/play-button.png' alt='Play'/></div>");
+                    thumbnail.on("click", function(){
+                    var videoElem = $("<video></video>")
+                        .attr("src", videoUrl)
+                        .attr("controls", true)
+                        .css({"width": "340px", "height": "190px"});
+                    thumbnailContainer.find(".play-overlay").remove();
+                    $(this).replaceWith(videoElem);
+                    videoElem.get(0).play();
+                    });
+                    thumbnailContainer.append(thumbnail).append(playOverlay);
+                    var descContainer = $("<div class='video-description'></div>").text(description);
+                    videoRow.append(selectContainer).append(thumbnailContainer).append(descContainer);
+                    container.append(videoRow);
+                });
+                },
+                error: function(err) {
+                console.log("Error in get_list:", err);
+                }
+            });
+        }
+
         $(function() {
             $("#searchBox").autocomplete({
                 source: function(request, response) {
@@ -83,32 +187,9 @@
                     )
                     .appendTo(ul);
             };
-        });
 
-        $(document).ready(function() {
-            $("#btnSearch").click(function() {
-                var searchTxt = $("input[name='search']").val();
-                $.ajax({
-                    url: "/get_list",
-                    type: "POST",
-                    data: { searchTxt: searchTxt },
-                    success: function(response) {
-                        $('#videoList').empty();
-                        $.each(response, function(i, videoUrl) {
-                            var video = $("<video></video>")
-                                .attr("src", videoUrl)
-                                .attr("controls", false)
-                                .on("click", function() {
-                                    if (this.paused) {
-                                        this.play();
-                                    } else {
-                                        this.pause();
-                                    }
-                                });
-                            $('#videoList').append(video);
-                        });
-                    }
-                });
+            $("#btnSearch").on("click", function() {
+                populateVideoList();
             });
         });
     </script>
@@ -116,12 +197,15 @@
 <body>
     <div id="searchContainer">
         <div style="margin-bottom: 20px;">
-            <h2 style="margin-bottom: 0px; text-align: center;">Autocompletion for driving scene with Emojis</h2>
+            <h2 style="margin-bottom: 0px; text-align: center;">Emojis in Autocompletion: Enhancing Video Search with Visual Cues</h2>
             <div class="right-align">Emojis are powered by Llama-3.1-70B</div>
         </div>
-        <div style="display: flex; width: 100%;">
-            <input type="text" name="search" id="searchBox" placeholder="Search driving scene. (e.g. a man unloading a truck)"/>
-            <button type="button" id="btnSearch">Search</button>
+        <div style="display: flex; justify-content: center; width: 100%;">
+        <form autocomplete="off">
+            <input type="text" name="dummy" style="display:none">
+            <input type="text" name="search" id="searchBox" placeholder="Enter search query..." autocomplete="off" />
+        </form>      
+        <button type="button" id="btnSearch">Search</button>
         </div>
     </div>
     <div id="searchResults"></div>

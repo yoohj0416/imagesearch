@@ -70,7 +70,7 @@ def init():
 async def upload_form(request: Request):
     return templates.TemplateResponse("emoji_autocomplete.html", {"request": request})
 
-@app.get("/search")
+@app.get("/search_emoji")
 async def search(term: str):
 
 	# compute time to autocomplete
